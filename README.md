@@ -32,9 +32,36 @@ Postgres/Qdrant directly.
 
 ## Status
 
-Bootstrap. See [sprints/planning/roadmap.md](sprints/planning/roadmap.md)
-for the sprint queue; the keep-klams / build-klams-mind decision record
-lives in the klams repo at `sprints/planning/wi259-recommendation.md`.
+First light: the vertical slice works end to end. See
+[sprints/planning/roadmap.md](sprints/planning/roadmap.md) for the
+sprint queue; the keep-klams / build-klams-mind decision record lives
+in the klams repo at `sprints/planning/wi259-recommendation.md`.
+
+## Usage
+
+```sh
+uv run klams-mind smoke          # prove the plumbing end to end
+uv run klams-mind smoke --json   # same, machine-readable
+```
+
+`smoke` health-checks klams, registers the `klams-mind` author, runs
+one memory search, and makes one LLM call through the configured
+endpoint. Exit 0 means all four legs work.
+
+### Configuration
+
+Defaults target the homelab (klams at `kubs0:7777`, kvllm at
+`kai:8000/v1`, model name auto-discovered from `/models`). To override,
+copy [config.example.toml](config.example.toml) to
+`~/.config/klams-mind/config.toml` (or point `KLAMS_MIND_CONFIG` at a
+file). Environment variables beat the file: `KLAMS_URL`, `KLAMS_TOKEN`,
+`KLAMS_MIND_MODEL_URL`, `KLAMS_MIND_MODEL_NAME`,
+`KLAMS_MIND_MODEL_API_KEY`. The klams token is required for anything
+beyond `/healthz`; keep it out of the repo.
+
+Note: klams exposes `register_author` / `memory_search` / `memory_add`
+only as MCP tools (Streamable HTTP at `{KLAMS_URL}/mcp`), not REST —
+the client wraps them via the official `mcp` SDK.
 
 ## Development
 
@@ -42,6 +69,9 @@ lives in the klams repo at `sprints/planning/wi259-recommendation.md`.
 uv sync          # create/refresh the venv
 just --list      # discover recipes
 just gate        # fmt-check + lint + typecheck + tests (what CI runs)
+
+# live tests (skipped otherwise) need the real service:
+KLAMS_URL=http://kubs0:7777 KLAMS_TOKEN=... uv run pytest -m live
 ```
 
 Workflow, principles, and the sprint convention are in

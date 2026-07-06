@@ -1,8 +1,8 @@
 # klams-mind — roadmap
 
 **Status:** Active — this is the pointer document: the top entry under
-"Sprint queue" is the next sprint.
-**Date:** 2026-07-05
+"Sprint queue" is the next sprint.  
+**Date:** 2026-07-06 (001 moved out — in flight on `001-bootstrap-first-light`)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -25,26 +25,7 @@ that queue.
 
 ## Sprint queue
 
-### 001 — Bootstrap & first light (next)
-
-Prove the full plumbing with the thinnest possible vertical slice.
-
-1. Config (`klams_mind.config`): klams base URL + token, model
-   endpoint(s) + names. TOML + env overrides; secrets never committed.
-2. klams client wrapping the REST/MCP surface actually needed now:
-   `register_author`, `memory_search`, `memory_add`, `/healthz`.
-   Typed responses (pydantic), tested against recorded fixtures; live
-   round-trip test marked and skipped without `KLAMS_URL`.
-3. LangChain + OpenAI-compatible chat wired (`langchain-openai`
-   pointed at kvllm): one trivial chain proving model access.
-4. CLI entry (`klams-mind smoke`): health-check klams, register
-   author, run one search, one LLM call; human-readable + `--json`.
-
-Acceptance: `klams-mind smoke` passes against live kubs0 + kvllm;
-`just gate` green; deps added this sprint: httpx, pydantic,
-langchain-core/langchain-openai, typer (each justified in sprint.md).
-
-### 002 — Retrieval-quality eval harness
+### 002 — Retrieval-quality eval harness (next)
 
 Port the krag eval design (TOML query suites; `substring`,
 `source_cited`, `no_hallucination` checks — see krag
