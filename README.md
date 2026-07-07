@@ -56,8 +56,10 @@ copy [config.example.toml](config.example.toml) to
 `~/.config/klams-mind/config.toml` (or point `KLAMS_MIND_CONFIG` at a
 file). Environment variables beat the file: `KLAMS_URL`, `KLAMS_TOKEN`,
 `KLAMS_MIND_MODEL_URL`, `KLAMS_MIND_MODEL_NAME`,
-`KLAMS_MIND_MODEL_API_KEY`. The klams token is required for anything
-beyond `/healthz`; keep it out of the repo.
+`KLAMS_MIND_MODEL_API_KEY`. A `./.env` is auto-loaded (real environment
+variables still win), so dropping `KLAMS_TOKEN=...` in `.env` is enough
+for live runs — `.env` is gitignored; keep the token out of the repo.
+The klams token is required for anything beyond `/healthz`.
 
 Note: klams exposes `register_author` / `memory_search` / `memory_add`
 only as MCP tools (Streamable HTTP at `{KLAMS_URL}/mcp`), not REST —
