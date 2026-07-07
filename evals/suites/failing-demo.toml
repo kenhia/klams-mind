@@ -1,0 +1,20 @@
+name = "failing-demo"
+description = """
+Deliberately-broken suite proving the harness detects and reports a
+failing check (exit 1). Its expectations are false on purpose — this is
+the negative counterpart to homelab-retrieval.toml, not a regression bar.
+"""
+
+[[queries]]
+query = "what container image does the klams service use"
+top_k = 5
+
+[[queries.checks]]
+# real klams docs never mention nginx — this source is never cited.
+type = "source_cited"
+value = "nginx/sites-enabled/default.conf"
+
+[[queries.checks]]
+# this exact phrase does not exist anywhere in the corpus.
+type = "substring"
+value = "the klams service is powered by hamsters on treadmills"

@@ -2,7 +2,7 @@
 
 **Branch:** `002-retrieval-eval-harness`
 **Started:** 2026-07-07
-**Status:** In progress
+**Status:** Done — harness built + tested; live baseline 4/4 green; gate green
 **Roadmap entry:** 002 (moved out of the queue when this doc landed).
 **Reference:** krag eval harness at `~/src/ai/krag/src/krag/evaluation/`
 (loader / checks / runner / reporter, four modules + a Typer `eval`
@@ -41,7 +41,7 @@ checks around retrieved memories**:
 |-------|-----------|------------------------|
 | `substring` | text in the LLM answer | text appears in the concatenated content of retrieved memories (knowledge `text`, fact `payload`, event `payload`) — tests content recall |
 | `source_cited` | fragment in a `source.file_path` | an expected memory is present in results, matched on knowledge `source_path`, a `tag`, or a memory-id fragment |
-| `no_hallucination` | answer admits insufficiency | **negative/out-of-corpus check**: a known off-topic query returns nothing above a relevance bar — retrieval doesn't surface spurious matches. (krag's own example was the off-topic "quantum computing" query.) |
+| `no_hallucination` | answer admits insufficiency | **absence/precision check**: a forbidden fragment must be *absent* from all retrieved content and sources — the system didn't surface spurious content. (See note: MCP search is scoreless and always returns `top_k`, so a "returns nothing above a bar" framing isn't measurable on the agent path; absence is the honest scoreless analog and the precision dual of `source_cited`.) |
 
 **Recommendation (to confirm with Ken before building checks):** make
 this a *retrieval* eval — deterministic, no LLM in the loop — because
@@ -51,13 +51,16 @@ retrieval baseline shouldn't carry. An LLM-synthesis ("does the model
 answer faithfully from retrieved context") eval is a natural *later*
 sprint that builds on this one; it is explicitly out of scope here.
 
-**Backend surface to settle early:** `memory_search` (MCP) is the
-primary target but its `PublicMemory` output carries **no relevance
-score**, which the `no_hallucination` bar wants. Options: (a) define
-the bar as result-count/expected-absence without scores, or (b) use
-REST `POST /memory/search` (returns `SearchHit` with `score` 0..1) for
-the score-aware check. Lean (a) first — fewer moving parts, and it
-keeps the whole harness on the MCP surface the client already speaks.
+**Backend surface — settled: MCP `memory_search`.** Its `PublicMemory`
+output carries **no relevance score**, and (verified live) it always
+returns `top_k` nearest neighbours even for gibberish queries — so a
+score/count-threshold `no_hallucination` isn't expressible here. REST
+`POST /memory/search` *does* return scores, but using it would (a)
+contradict the pinned surface split (MCP is the agent surface; REST is
+operator/bulk-read only) and (b) measure a different code path than
+agents actually use — wrong target for a retrieval regression bar. So
+the harness stays on MCP `memory_search`, and `no_hallucination` is an
+**absence** check (forbidden fragment must not appear in any hit).
 
 ## Scope
 
@@ -148,3 +151,36 @@ belongs here.
   baseline) are blocked; the whole harness is built and tested offline
   against a fake backend in the meantime, and the baseline is generated
   once the grant exists.
+- **Unblocked (2026-07-07):** the grant had been edited into the wrong
+  config copy; once corrected and klams reloaded, the scoped `klams-mind`
+  token authenticates (`/v1/authors` and `/mcp` → 200) and a full
+  `klams-mind smoke` passes under the klams-mind identity via `.env`
+  auto-load. Live baseline unblocked. **Design locked: retrieval-only**
+  eval — deterministic, no LLM in the assertion path (per Ken).
+- **Harness built (TDD, 4 modules mirroring krag + a CLI):**
+  `eval/suite.py` (pydantic-typed TOML loader, `extra="forbid"` so typos
+  raise), `eval/checks.py` (the three checks over a backend-neutral
+  `RetrievedItem`, `if/elif` dispatch), `eval/runner.py` (`Retriever`
+  protocol + `run_suite` + `KlamsRetriever` adapter mapping klams
+  fact/knowledge/event memories to `RetrievedItem`), `eval/report.py`
+  (markdown **and** JSON, plus a per-check-type breakdown krag lacks).
+  CLI: `klams-mind eval run <suite>` (`--json`, `--out`), exit **0**
+  all-pass / **1** any-fail / **2** bad suite. 37 new tests, all against
+  fakes; gate green (58 passed total).
+- **Suites + baseline live in `evals/`** (durable assets, not sprint-
+  scoped — they feed klams sprint 016). `evals/suites/homelab-retrieval.toml`
+  is the baseline suite; `evals/baselines/homelab-retrieval.md` is its
+  committed report (**4/4, 100%** against live kubs0). `evals/suites/
+  failing-demo.toml` proves the failing path (exit 1) with intentionally
+  false expectations.
+
+## Outcome
+
+Acceptance met: `klams-mind eval run evals/suites/homelab-retrieval.toml`
+produces a committed markdown baseline (4/4 green) against live kubs0;
+`evals/suites/failing-demo.toml` demonstrates a failing check with a
+non-zero exit; `just gate` green; `python-dotenv` justified above.
+`no_hallucination` was reframed to a precision/absence check (documented
+in the design table) because MCP `memory_search` is scoreless and always
+returns `top_k` — the honest scoreless-retrieval analog, staying on the
+agent surface a retrieval regression bar should measure.

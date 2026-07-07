@@ -12,12 +12,17 @@ import typer
 
 from klams_mind import __version__
 from klams_mind.config import Config, load_config
+from klams_mind.eval.report import Report, build_report, to_json, to_markdown
+from klams_mind.eval.runner import KlamsRetriever, Retriever, run_suite
+from klams_mind.eval.suite import EvalLoadError, Suite, load_suite
 from klams_mind.klams import connect as _connect
 from klams_mind.llm import build_chat as _build_chat
 from klams_mind.llm import ping
 from klams_mind.llm import resolve_model_name as _resolve_model_name
 
 app = typer.Typer(help="LLM-smart memory companion to klams.")
+eval_app = typer.Typer(help="Retrieval-quality evals against klams.")
+app.add_typer(eval_app, name="eval")
 
 
 class SmokeError(Exception):
@@ -126,3 +131,55 @@ def smoke(
         typer.echo(json.dumps(report, indent=2))
     else:
         _print_human(report)
+
+
+async def run_eval(
+    suite: Suite,
+    cfg: Config,
+    *,
+    connect: Any = _connect,
+    retriever_factory: Any = KlamsRetriever,
+) -> Report:
+    """Run a suite against live klams retrieval and aggregate a report."""
+    async with connect(cfg.klams) as client:
+        retriever: Retriever = retriever_factory(client)
+        results = await run_suite(suite, retriever)
+    return build_report(suite.name, results)
+
+
+@eval_app.command("run")
+def eval_run(
+    suite_path: Annotated[Path, typer.Argument(metavar="SUITE", help="TOML query suite.")],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit the report as JSON on stdout.")
+    ] = False,
+    out: Annotated[
+        Path | None, typer.Option(help="Also write the markdown report to this file.")
+    ] = None,
+    config: Annotated[
+        Path | None, typer.Option(help="Config file (default: KLAMS_MIND_CONFIG).")
+    ] = None,
+    debug: Annotated[bool, typer.Option(help="Re-raise failures with full tracebacks.")] = False,
+) -> None:
+    """Run a retrieval suite; exit 0 if every check passes, 1 if any fails."""
+    cfg = load_config(path=config)
+    try:
+        suite = load_suite(suite_path)
+    except EvalLoadError as exc:
+        typer.echo(f"eval: {exc}", err=True)
+        raise typer.Exit(2) from exc
+    try:
+        report = asyncio.run(run_eval(suite, cfg))
+    except Exception as exc:
+        if debug:
+            raise
+        typer.echo(f"eval: retrieval failed: {exc}", err=True)
+        typer.echo("check klams (kubs0:7777) and KLAMS_TOKEN", err=True)
+        raise typer.Exit(1) from exc
+
+    markdown = to_markdown(report)
+    if out is not None:
+        out.write_text(markdown)
+        typer.echo(f"wrote {out}", err=True)
+    typer.echo(to_json(report) if json_output else markdown)
+    raise typer.Exit(0 if report.failed == 0 else 1)

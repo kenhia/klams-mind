@@ -48,6 +48,26 @@ uv run klams-mind smoke --json   # same, machine-readable
 one memory search, and makes one LLM call through the configured
 endpoint. Exit 0 means all four legs work.
 
+### Retrieval evals
+
+```sh
+uv run klams-mind eval run evals/suites/homelab-retrieval.toml
+uv run klams-mind eval run <suite> --json           # machine-readable
+uv run klams-mind eval run <suite> --out report.md  # also write markdown
+```
+
+A suite is a TOML file of queries, each with retrieval checks run against
+klams `memory_search` (deterministic — no LLM in the loop):
+
+- `substring` — expected text appears in retrieved content (content recall)
+- `source_cited` — expected source/tag appears among the hits (source recall)
+- `no_hallucination` — a forbidden fragment is *absent* from all hits (precision)
+
+Exit code is **0** if every check passes, **1** if any check fails, **2**
+for a bad suite file — so CI can gate on it. Suites live in
+[evals/suites/](evals/suites/); a committed baseline report is in
+[evals/baselines/](evals/baselines/) as the retrieval regression bar.
+
 ### Configuration
 
 Defaults target the homelab (klams at `kubs0:7777`, kvllm at

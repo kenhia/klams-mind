@@ -1,0 +1,62 @@
+name = "homelab-retrieval"
+description = """
+Baseline retrieval suite over questions klams demonstrably contains
+(machines, services, config, sprint history). This is the regression bar
+for klams retrieval changes — every check here should pass; a failure
+means retrieval regressed. Checks are retrieval-only (no LLM): `substring`
+= content recall, `source_cited` = source recall, `no_hallucination` =
+precision (a forbidden fragment must be absent from results).
+"""
+
+[[queries]]
+query = "what container image does the klams service use"
+top_k = 5
+
+[[queries.checks]]
+type = "source_cited"
+value = "klams/deploy/docker-compose.yml"
+
+[[queries.checks]]
+type = "substring"
+value = "image: klams"
+
+[[queries.checks]]
+# precision: a homelab retrieval question must not drag in cooking content.
+type = "no_hallucination"
+value = "sourdough"
+
+[[queries]]
+query = "what host runs the klams memory service"
+top_k = 5
+
+[[queries.checks]]
+type = "substring"
+value = "klams"
+
+[[queries.checks]]
+type = "source_cited"
+value = "klams.service"
+
+[[queries]]
+query = "where does kvllm serve models"
+top_k = 5
+
+[[queries.checks]]
+type = "substring"
+value = "kvllm"
+
+[[queries.checks]]
+type = "source_cited"
+value = "klams.example.toml"
+
+[[queries]]
+query = "klams sprint bootstrap first light"
+top_k = 5
+
+[[queries.checks]]
+type = "source_cited"
+value = "001-bootstrap-first-light/sprint.md"
+
+[[queries.checks]]
+type = "substring"
+value = "bootstrap"
