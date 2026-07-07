@@ -2,7 +2,7 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-07-06 (001 moved out — in flight on `001-bootstrap-first-light`)  
+**Date:** 2026-07-07 (001 shipped; 002 moved out — in flight on `002-retrieval-eval-harness`)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -34,23 +34,7 @@ that queue.
 
 ## Sprint queue
 
-### 002 — Retrieval-quality eval harness (next)
-
-Port the krag eval design (TOML query suites; `substring`,
-`source_cited`, `no_hallucination` checks — see krag
-`src/krag/evaluation/` for the reference implementation) against klams
-`memory_search` / `memory_context`.
-
-1. Suite loader, runner, reporter (markdown report per run).
-2. An initial suite seeded from real homelab questions (machines,
-   services, sprint history — things klams demonstrably contains).
-3. Baseline report committed; this becomes the regression bar for
-   klams retrieval changes (feeds klams sprint 016).
-
-Acceptance: `klams-mind eval run <suite>` produces a committed
-baseline; a deliberately-broken query demonstrates a failing check.
-
-### 003 — Memory extraction
+### 003 — Memory extraction (next)
 
 Distill durable facts from agent session logs (start with Claude Code
 JSONL transcripts; GHCP sessions later) into klams.
