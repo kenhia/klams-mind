@@ -1,8 +1,8 @@
 # klams-mind — roadmap
 
 **Status:** Active — this is the pointer document: the top entry under
-"Sprint queue" is the next sprint.
-**Date:** 2026-07-05
+"Sprint queue" is the next sprint.  
+**Date:** 2026-07-06 (001 moved out — in flight on `001-bootstrap-first-light`)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -13,11 +13,20 @@ eval harness, prompt presets, retrieval lessons): klams repo
 
 klams-mind is the intelligence layer klams deliberately excludes from
 its core: extraction, semantic contradiction detection, consolidation,
-and retrieval evals. It is a **client** of klams (MCP/REST at
-`kubs0:7777`, own scoped token + author identity) and consumes models
-through **OpenAI-compatible endpoints** (vLLM via kvllm on kai; klams
-keeps embeddings local to kubs0). Orchestration is LangChain — this
-project is also the designated playground for learning it properly.
+and retrieval evals. It is a **client** of klams (own scoped token +
+author identity) and consumes models through **OpenAI-compatible
+endpoints** (vLLM via kvllm on kai; klams keeps embeddings local to
+kubs0). Orchestration is LangChain — this project is also the
+designated playground for learning it properly.
+
+**Which klams surface for what** (learned in 001; mirrored in the
+klams roadmap 015 entry): the *agent* surface is **MCP-only**
+(`kubs0:7777/mcp`, Streamable HTTP — `register_author`, `memory_add`,
+`memory_search`, `event_search`, …, all `PublicMemory`-projected;
+there is deliberately no REST `memory_add`). REST is the
+controller/operator surface — klams-mind uses it only for bulk paged
+reads (`GET /v1/memories`) and `/healthz`. New agent capabilities
+klams grows for us (dissent proposal) arrive as MCP tools.
 
 Anything klams-mind needs klams to grow (dissent-proposal API, paging,
 tokens) is filed against klams sprint 015 "Companion enablement" — see
@@ -25,26 +34,7 @@ that queue.
 
 ## Sprint queue
 
-### 001 — Bootstrap & first light (next)
-
-Prove the full plumbing with the thinnest possible vertical slice.
-
-1. Config (`klams_mind.config`): klams base URL + token, model
-   endpoint(s) + names. TOML + env overrides; secrets never committed.
-2. klams client wrapping the REST/MCP surface actually needed now:
-   `register_author`, `memory_search`, `memory_add`, `/healthz`.
-   Typed responses (pydantic), tested against recorded fixtures; live
-   round-trip test marked and skipped without `KLAMS_URL`.
-3. LangChain + OpenAI-compatible chat wired (`langchain-openai`
-   pointed at kvllm): one trivial chain proving model access.
-4. CLI entry (`klams-mind smoke`): health-check klams, register
-   author, run one search, one LLM call; human-readable + `--json`.
-
-Acceptance: `klams-mind smoke` passes against live kubs0 + kvllm;
-`just gate` green; deps added this sprint: httpx, pydantic,
-langchain-core/langchain-openai, typer (each justified in sprint.md).
-
-### 002 — Retrieval-quality eval harness
+### 002 — Retrieval-quality eval harness (next)
 
 Port the krag eval design (TOML query suites; `substring`,
 `source_cited`, `no_hallucination` checks — see krag
@@ -84,8 +74,10 @@ The headline feature: find memories that contradict in *meaning*.
 1. Candidate pairing (embedding-similarity buckets via klams search;
    don't O(n²) the corpus), then LLM judgment with a
    refute-by-default prompt.
-2. File dissents through the klams companion-enablement API
-   (**depends on klams sprint 015** — design the contract together).
+2. File dissents through the new klams **MCP dissent-proposal tool**
+   (**depends on klams sprint 015** — the contract is designed there:
+   target fact + proposed correction + reason, optionally citing the
+   contradicting memory; write scope).
 3. Resolution stays human, in the klams viewport `/dissents` page.
 
 Acceptance: seeded contradictory facts are detected and appear as

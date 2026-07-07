@@ -1,0 +1,13 @@
+# klams-mind config — copy to ~/.config/klams-mind/config.toml
+# (or point KLAMS_MIND_CONFIG at it). Every key is optional; defaults
+# target the homelab. Env overrides: KLAMS_URL, KLAMS_TOKEN,
+# KLAMS_MIND_MODEL_URL, KLAMS_MIND_MODEL_NAME, KLAMS_MIND_MODEL_API_KEY.
+
+[klams]
+base_url = "http://kubs0:7777"
+token = "" # scoped klams-mind token — set here or via KLAMS_TOKEN, never commit
+
+[model]
+base_url = "http://kai:8000/v1" # OpenAI-compatible (kvllm)
+name = "auto" # "auto" discovers the served model via /models; or a kvllm registry key
+api_key = "unused" # vLLM ignores it; the OpenAI client requires one
