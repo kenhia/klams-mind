@@ -2,7 +2,9 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-07-07 (001 shipped; 002 moved out — in flight on `002-retrieval-eval-harness`)  
+**Date:** 2026-07-08 (001–004 shipped; queue renumbered 005+ — the
+unplanned 003 client-lib and 004 scored-retrieval sprints consumed the
+numbers this queue had penciled in)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -34,7 +36,7 @@ that queue.
 
 ## Sprint queue
 
-### 003 — Memory extraction (next)
+### 005 — Memory extraction (next)
 
 Distill durable facts from agent session logs (start with Claude Code
 JSONL transcripts; GHCP sessions later) into klams.
@@ -51,29 +53,31 @@ JSONL transcripts; GHCP sessions later) into klams.
 Acceptance: a real session log yields reviewed facts landed in klams,
 visible in the viewport under the klams-mind author.
 
-### 004 — Semantic contradiction detection
+### 006 — Semantic contradiction detection
 
 The headline feature: find memories that contradict in *meaning*.
 
 1. Candidate pairing (embedding-similarity buckets via klams search;
    don't O(n²) the corpus), then LLM judgment with a
    refute-by-default prompt.
-2. File dissents through the new klams **MCP dissent-proposal tool**
-   (**depends on klams sprint 015** — the contract is designed there:
-   target fact + proposed correction + reason, optionally citing the
-   contradicting memory; write scope).
+2. File dissents through the klams **MCP dissent-proposal tool**
+   (klams sprint 015 shipped it; `dissent_propose` is live on kubs0 as
+   of the 2026-07-08 deploy — contract: target fact + proposed
+   correction + reason, optionally citing the contradicting memory;
+   write scope).
 3. Resolution stays human, in the klams viewport `/dissents` page.
 
 Acceptance: seeded contradictory facts are detected and appear as
 pending dissents in the viewport; false-positive rate on a
 non-contradictory sample is measured and recorded.
 
-### 005 — Consolidation
+### 007 — Consolidation
 
 Decay-informed maintenance passes: merge near-duplicates, summarize
 stale clusters, propose prunes. Propose-first like extraction; uses
 klams paging (`GET /v1/memories`) and decay/trust signals. Scope
-deliberately vague until 002–004 teach us what the corpus needs.
+deliberately vague until the eval, extraction, and contradiction
+sprints teach us what the corpus needs.
 
 ### Later / unscheduled
 
