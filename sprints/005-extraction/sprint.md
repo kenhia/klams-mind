@@ -51,4 +51,21 @@ layout, service contracts, verification results).
 
 ## Decisions & surprises
 
-(chronicled as the sprint goes)
+- **Markup-insensitive citation matching.** The first live run refused
+  9 of 13 candidates as uncited — but 8 of the 9 evidence quotes were
+  verbatim in their windows. The model copies the *words* faithfully
+  and drops markdown markup (backticks, `**`, smart quotes) while
+  quoting. `_normalize` now strips markup from both sides before the
+  containment check; the words themselves still have to match. The 9th
+  refusal was the gate working as designed.
+- **Tool noise dominates transcripts.** The 867 KB acceptance
+  transcript reduced to 69 conversation turns / 3 windows (~24 KB)
+  once tool_use/tool_result blocks, skill bodies, sidechains, and
+  system reminders were stripped.
+- **Acceptance run** (klams 016/017 ship + deploy session,
+  2026-07-08): dry-run proposed 13/13 cited candidates; all reviewed
+  accurate; `--apply` wrote 13 under the klams-mind author (tagged
+  `session-extract`, `source_path` = the transcript); the written fact
+  ranks first on `memory_search` for its own text (score 0.928); an
+  immediate dry-run re-run flagged 13/13 as duplicates — the
+  propose → apply → dedupe loop closes.

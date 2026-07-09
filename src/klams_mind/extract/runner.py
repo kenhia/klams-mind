@@ -9,6 +9,7 @@ available, but a similarity threshold is deferred until the corpus
 teaches us one). Propose-first: writes happen only when `apply=True`.
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
@@ -41,8 +42,15 @@ class ExtractionResult:
         return sum(1 for c in self.candidates if c.status == "written")
 
 
+# Models copy quote *text* faithfully but drop markdown markup (backticks,
+# emphasis, smart quotes) — seen live: 8 of 9 refusals on the first real
+# transcript were markup-only mismatches. Strip markup from both sides;
+# the words themselves must still match verbatim.
+_MARKUP = re.compile(r"[`*_\"'\u201c\u201d\u2018\u2019]")
+
+
 def _normalize(s: str) -> str:
-    return " ".join(s.lower().split())
+    return " ".join(_MARKUP.sub("", s.lower()).split())
 
 
 def is_cited(evidence: str, window: str) -> bool:

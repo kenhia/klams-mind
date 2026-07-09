@@ -44,6 +44,12 @@ def test_is_cited_normalizes_whitespace_and_case() -> None:
     assert not is_cited("   ", WINDOW)
 
 
+def test_is_cited_ignores_markdown_markup() -> None:
+    window = 'ASSISTANT: Gate: `just gate-all` green (**service** + "viewport") locally.'
+    assert is_cited("Gate: just gate-all green (service + viewport) locally.", window)
+    assert not is_cited("Gate: just gate-all red locally.", window)
+
+
 async def test_dry_run_proposes_cited_and_flags_uncited() -> None:
     router = ToolRouter({"memory_search": tool_ok([])})
     chain = build_extraction_chain(FakeListChatModel(responses=[reply(CITED, UNCITED)]))

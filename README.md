@@ -70,6 +70,24 @@ envelopes; scores are only comparable within a kind). Suites live in
 [evals/suites/](evals/suites/); a committed baseline report is in
 [evals/baselines/](evals/baselines/) as the retrieval regression bar.
 
+### Memory extraction
+
+```sh
+uv run klams-mind extract run <session.jsonl>          # dry-run: propose only
+uv run klams-mind extract run <session.jsonl> --apply  # write accepted facts
+uv run klams-mind extract run <session.jsonl> --json --out report.md
+```
+
+Reads a Claude Code JSONL session transcript, strips harness noise
+(tool calls, skill bodies, system reminders), and asks the model for
+durable facts, each carrying a verbatim evidence quote. **Cite or
+refuse is enforced in code**: evidence not found in the source window
+(markup-insensitive match) marks the candidate `uncited` and it is
+never written. Candidates klams already knows (normalized containment
+via `memory_search`) are flagged `duplicate`. Dry-run is the default;
+`--apply` writes the survivors via `memory_add` under the klams-mind
+author, tagged `session-extract` with `source_path` = the transcript.
+
 ### Configuration
 
 Defaults target the homelab (klams at `kubs0:7777`, kvllm at
