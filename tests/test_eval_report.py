@@ -2,10 +2,12 @@
 
 import json
 
-from klams_mind.eval.checks import CheckResult
+from klams_mind.eval.checks import CheckResult, RetrievedItem
 from klams_mind.eval.report import build_report, to_json, to_markdown
 from klams_mind.eval.runner import EvalQueryResult
 from klams_mind.eval.suite import Check, CheckType
+
+HIT = RetrievedItem(content="c", source="src/a.py", kind="knowledge", score=0.712, source_rank=0)
 
 
 def qr(query: str, checks: list[CheckResult]) -> EvalQueryResult:
@@ -15,6 +17,7 @@ def qr(query: str, checks: list[CheckResult]) -> EvalQueryResult:
         sources=["src/a.py"],
         checks=checks,
         passed=all(c.passed for c in checks),
+        hits=[HIT],
     )
 
 
@@ -63,6 +66,16 @@ def test_markdown_has_headline_and_failed_query() -> None:
     assert "q2" not in clean
 
 
+def test_markdown_lists_per_hit_score_kind_rank() -> None:
+    md = to_markdown(build_report("homelab", [RESULTS[0]]))
+    assert "`0.712` knowledge r0 — src/a.py" in md
+    # hits without score metadata (e.g. hand-built items) still render
+    md_bare = to_markdown(
+        build_report("h", [EvalQueryResult("q3", 1, ["s"], [], True, [RetrievedItem("c", "s")])])
+    )
+    assert "`—` ? r? — s" in md_bare
+
+
 def test_json_roundtrips_and_has_keys() -> None:
     payload = json.loads(to_json(build_report("homelab", RESULTS)))
     assert payload["suite"] == "homelab"
@@ -72,3 +85,5 @@ def test_json_roundtrips_and_has_keys() -> None:
     assert payload["results"][1]["query"] == "q2"
     assert payload["results"][1]["passed"] is False
     assert payload["results"][1]["checks"][0]["type"] == "substring"
+    hit = payload["results"][0]["hits"][0]
+    assert hit == {"source": "src/a.py", "kind": "knowledge", "score": 0.712, "source_rank": 0}

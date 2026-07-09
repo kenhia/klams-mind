@@ -25,6 +25,11 @@ class RetrievedItem:
     content: str
     source: str
     tags: list[str] = field(default_factory=list)
+    # klams-016 scored-envelope metadata; checks ignore it, the report
+    # shows it. `score` is only comparable within the same `kind`.
+    kind: str = ""
+    score: float | None = None
+    source_rank: int | None = None
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ a regression shows *which* check class slipped.
 import json
 from dataclasses import dataclass
 
+from klams_mind.eval.checks import RetrievedItem
 from klams_mind.eval.runner import EvalQueryResult
 
 
@@ -55,6 +56,15 @@ def to_json(report: Report) -> str:
                     "query": r.query,
                     "hit_count": r.hit_count,
                     "sources": r.sources,
+                    "hits": [
+                        {
+                            "source": h.source,
+                            "kind": h.kind,
+                            "score": h.score,
+                            "source_rank": h.source_rank,
+                        }
+                        for h in r.hits
+                    ],
                     "passed": r.passed,
                     "checks": [
                         {
@@ -102,4 +112,18 @@ def to_markdown(report: Report) -> str:
     for r in report.results:
         mark = "✓" if r.passed else "✗"
         lines.append(f"- {mark} **{r.query}** — {r.hit_count} hit(s)")
+        lines += [_hit_line(h) for h in r.hits]
     return "\n".join(lines) + "\n"
+
+
+def _hit_line(h: RetrievedItem) -> str:
+    """One per-hit detail line: score, kind, pre-fusion source rank, source.
+
+    Raw scores are only comparable within the same kind (cosine for
+    knowledge vs ts_rank for fact/event), so the kind sits next to the
+    score rather than being aggregated across hits.
+    """
+    score = f"{h.score:.3f}" if h.score is not None else "—"
+    rank = f"r{h.source_rank}" if h.source_rank is not None else "r?"
+    kind = h.kind or "?"
+    return f"  - `{score}` {kind} {rank} — {h.source or '(no source)'}"

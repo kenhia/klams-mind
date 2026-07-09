@@ -64,7 +64,9 @@ klams `memory_search` (deterministic — no LLM in the loop):
 - `no_hallucination` — a forbidden fragment is *absent* from all hits (precision)
 
 Exit code is **0** if every check passes, **1** if any check fails, **2**
-for a bad suite file — so CI can gate on it. Suites live in
+for a bad suite file — so CI can gate on it. Reports list every hit with
+its relevance score, kind, and pre-fusion source rank (klams ≥ 016 scored
+envelopes; scores are only comparable within a kind). Suites live in
 [evals/suites/](evals/suites/); a committed baseline report is in
 [evals/baselines/](evals/baselines/) as the retrieval regression bar.
 
