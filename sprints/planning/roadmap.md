@@ -2,9 +2,10 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-07-08 (001–004 shipped; queue renumbered 005+ — the
+**Date:** 2026-07-08 (001–004 shipped; 005 extraction moved out — in
+flight on `005-extraction`; queue was renumbered 005+ after the
 unplanned 003 client-lib and 004 scored-retrieval sprints consumed the
-numbers this queue had penciled in)  
+numbers it had penciled in)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -36,24 +37,7 @@ that queue.
 
 ## Sprint queue
 
-### 005 — Memory extraction (next)
-
-Distill durable facts from agent session logs (start with Claude Code
-JSONL transcripts; GHCP sessions later) into klams.
-
-1. Log reader + candidate-fact extraction chain (LangChain), with the
-   krag lesson baked in: cite-or-refuse prompting, no free-form
-   fabrication.
-2. **Propose-first workflow**: dry-run mode outputs candidates for
-   review; `--apply` writes via `memory_add` under the klams-mind
-   author. Dedupe against existing memories via `memory_search` before
-   writing.
-3. Scheduled operation deferred until the manual loop proves value.
-
-Acceptance: a real session log yields reviewed facts landed in klams,
-visible in the viewport under the klams-mind author.
-
-### 006 — Semantic contradiction detection
+### 006 — Semantic contradiction detection (next)
 
 The headline feature: find memories that contradict in *meaning*.
 
