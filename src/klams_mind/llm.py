@@ -1,15 +1,17 @@
 """Model access via LangChain over OpenAI-compatible endpoints (kvllm).
 
-No in-process model loading — everything goes over HTTP to whatever
-the config points at.
+The client mechanics live in kvllm-client (the kvllm repo's client/
+distribution — homelab-ai WI 274); this module keeps klams-mind's
+config-shaped seam over it. No in-process model loading — everything
+goes over HTTP to whatever the config points at.
 """
 
 import httpx
+import kvllm_client
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
 
 from klams_mind.config import ModelConfig
 
@@ -22,12 +24,8 @@ _PING_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def build_chat(cfg: ModelConfig) -> ChatOpenAI:
-    return ChatOpenAI(
-        base_url=cfg.base_url,
-        api_key=SecretStr(cfg.api_key),
-        model=cfg.name,
-        temperature=0,
-    )
+    chat, _ = kvllm_client.local_model(cfg.base_url, model=cfg.name, api_key=cfg.api_key)
+    return chat
 
 
 def ping(model: BaseChatModel, word: str = "pong") -> str:
@@ -42,16 +40,4 @@ async def resolve_model_name(cfg: ModelConfig, http: httpx.AsyncClient | None = 
     kvllm serves one model at a time and switches by registry key, so
     asking `/models` beats hardcoding a name that goes stale.
     """
-    if cfg.name != "auto":
-        return cfg.name
-    url = f"{cfg.base_url}/models"
-    if http is not None:
-        resp = await http.get(url)
-    else:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url)
-    resp.raise_for_status()
-    served = resp.json()["data"]
-    if not served:
-        raise RuntimeError(f"no models served at {url}")
-    return served[0]["id"]
+    return await kvllm_client.aresolve_model(cfg.name, cfg.base_url, http=http)
