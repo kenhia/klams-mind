@@ -65,6 +65,11 @@ KNOWLEDGE_MEMORY = {
 }
 
 
+def scored(memory: dict[str, Any], score: float = 0.71, source_rank: int = 0) -> dict[str, Any]:
+    """Wrap a memory fixture in the klams-016 scored-hit envelope."""
+    return {"score": score, "source_rank": source_rank, "memory": memory}
+
+
 class FakeToolCaller:
     """Stands in for the MCP session: records calls, replays results."""
 
@@ -144,8 +149,8 @@ async def test_register_author_calls_tool_and_parses() -> None:
 # --- memory_search ----------------------------------------------------------
 
 
-async def test_memory_search_parses_kinds() -> None:
-    caller = FakeToolCaller(tool_ok([FACT_MEMORY, KNOWLEDGE_MEMORY]))
+async def test_memory_search_parses_scored_kinds() -> None:
+    caller = FakeToolCaller(tool_ok([scored(FACT_MEMORY, 0.31, 1), scored(KNOWLEDGE_MEMORY)]))
     client = make_client(caller)
 
     hits = await client.memory_search("kvllm endpoint", top_k=5)
@@ -153,11 +158,14 @@ async def test_memory_search_parses_kinds() -> None:
     name, args = caller.calls[0]
     assert name == "memory_search"
     assert args == {"query": "kvllm endpoint", "top_k": 5}
-    assert isinstance(hits[0], FactMemory)
-    assert hits[0].type == "EnvFact"
-    assert isinstance(hits[1], KnowledgeMemory)
-    assert "kai:8000" in hits[1].text
-    assert hits[1].author.agent_name == "claude-code"
+    assert hits[0].score == 0.31
+    assert hits[0].source_rank == 1
+    assert isinstance(hits[0].memory, FactMemory)
+    assert hits[0].memory.type == "EnvFact"
+    assert hits[1].score == 0.71
+    assert isinstance(hits[1].memory, KnowledgeMemory)
+    assert "kai:8000" in hits[1].memory.text
+    assert hits[1].memory.author.agent_name == "claude-code"
 
 
 async def test_memory_search_passes_filters() -> None:
@@ -246,4 +254,4 @@ async def test_live_round_trip() -> None:
             tags=["klams-mind", "smoke-test"],
         )
         hits = await client.memory_search("klams-mind sprint 001 live round-trip marker", top_k=10)
-        assert any(h.id == added.id for h in hits)
+        assert any(h.memory.id == added.id for h in hits)

@@ -73,7 +73,9 @@ async def run_smoke(
             report["search"] = {
                 "query": query,
                 "hits": len(hits),
-                "top": [{"kind": h.kind, "id": str(h.id)} for h in hits],
+                "top": [
+                    {"kind": h.memory.kind, "id": str(h.memory.id), "score": h.score} for h in hits
+                ],
             }
 
         step = "LLM call"

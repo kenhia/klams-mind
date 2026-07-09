@@ -100,8 +100,25 @@ class EventMemory(_MemoryBase):
 
 Memory = Annotated[FactMemory | KnowledgeMemory | EventMemory, Field(discriminator="kind")]
 
+
+class ScoredMemory(BaseModel):
+    """One `memory_search` hit (klams ≥ sprint 016).
+
+    `score` is the raw per-source relevance score and is NOT normalized
+    across kinds — knowledge is cosine similarity (~0..1), fact/event is
+    Postgres ts_rank (typically ≪ 1) — so only compare scores within the
+    same `memory.kind`. `source_rank` is the hit's 0-based rank within
+    its own source before cross-source fusion; global rank is the list
+    index.
+    """
+
+    score: float
+    source_rank: int
+    memory: Memory
+
+
 _memory = TypeAdapter[Memory](Memory)
-_memories = TypeAdapter[list[Memory]](list[Memory])
+_scored_memories = TypeAdapter[list[ScoredMemory]](list[ScoredMemory])
 
 
 class RegisteredAuthor(BaseModel):
@@ -165,13 +182,13 @@ class KlamsClient:
         kinds: Sequence[str] | None = None,
         tags: Sequence[str] | None = None,
         top_k: int = 10,
-    ) -> list[Memory]:
+    ) -> list[ScoredMemory]:
         args: dict[str, Any] = {"query": query, "top_k": top_k}
         if kinds is not None:
             args["kinds"] = list(kinds)
         if tags is not None:
             args["tags"] = list(tags)
-        return _memories.validate_python(await self._call("memory_search", args))
+        return _scored_memories.validate_python(await self._call("memory_search", args))
 
     async def add_knowledge(
         self,

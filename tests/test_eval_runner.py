@@ -102,8 +102,12 @@ FACT = {
 }
 
 
-async def test_klams_retriever_maps_knowledge_and_fact() -> None:
-    caller = FakeCaller(tool_ok([KNOWLEDGE, FACT]))
+async def test_klams_retriever_maps_scored_knowledge_and_fact() -> None:
+    envelopes = [
+        {"score": 0.71, "source_rank": 0, "memory": KNOWLEDGE},
+        {"score": 0.04, "source_rank": 2, "memory": FACT},
+    ]
+    caller = FakeCaller(tool_ok(envelopes))
     client = KlamsClient(KlamsConfig(), tool_caller=caller)
     retr = KlamsRetriever(client)
 
@@ -114,5 +118,14 @@ async def test_klams_retriever_maps_knowledge_and_fact() -> None:
     assert know.content == "kvllm serves models on kai:8000"
     assert know.source == "/home/ken/src/ai/kvllm/README.md"
     assert know.tags == ["homelab"]
+    # scored-envelope metadata rides along for the report.
+    assert (know.kind, know.score, know.source_rank) == ("knowledge", 0.71, 0)
     # fact payload is searchable content; source carries the fact type.
     assert "kubs0" in fact.content and "EnvFact" in fact.source
+    assert (fact.kind, fact.score, fact.source_rank) == ("fact", 0.04, 2)
+
+
+async def test_run_suite_carries_hits_into_result() -> None:
+    hits = [RetrievedItem(content="x", source="s", kind="knowledge", score=0.5, source_rank=0)]
+    results = await run_suite(suite_with(Check(type="substring", value="x")), FakeRetriever(hits))
+    assert results[0].hits == hits

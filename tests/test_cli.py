@@ -15,6 +15,7 @@ from tests.test_klams_client import (
     KNOWLEDGE_MEMORY,
     REGISTER_AUTHOR_OUT,
     FakeToolCaller,
+    scored,
     tool_ok,
 )
 
@@ -26,7 +27,7 @@ class SmokeToolCaller(FakeToolCaller):
         super().__init__(tool_ok(None))
         self.results = {
             "register_author": tool_ok(REGISTER_AUTHOR_OUT),
-            "memory_search": tool_ok([KNOWLEDGE_MEMORY]),
+            "memory_search": tool_ok([scored(KNOWLEDGE_MEMORY)]),
         }
 
     async def __call__(self, name, args):  # type: ignore[no-untyped-def]
@@ -65,6 +66,8 @@ async def test_run_smoke_exercises_all_four_steps() -> None:
     assert report["klams"]["status"] == "Ok"
     assert report["author"]["agent_name"] == "klams-mind"
     assert report["search"]["hits"] == 1
+    assert report["search"]["top"][0]["kind"] == "knowledge"
+    assert report["search"]["top"][0]["score"] == 0.71
     assert report["model"]["name"] == "fake-model"
     assert report["model"]["reply"] == "pong"
     tool_names = [name for name, _ in caller.calls]
