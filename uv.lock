@@ -441,8 +441,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "kvllm-client" },
     { name = "langchain-core" },
-    { name = "langchain-openai" },
     { name = "mcp" },
     { name = "pydantic" },
     { name = "typer" },
@@ -459,8 +459,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "kvllm-client", git = "ssh://git@github.com/kenhia/kvllm.git?subdirectory=client" },
     { name = "langchain-core", specifier = ">=1.4.8" },
-    { name = "langchain-openai", specifier = ">=1.3.3" },
     { name = "mcp", specifier = ">=1.28.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "typer", specifier = ">=0.26.8" },
@@ -472,6 +472,15 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "ruff", specifier = ">=0.15" },
     { name = "ty" },
+]
+
+[[package]]
+name = "kvllm-client"
+version = "0.1.0"
+source = { git = "ssh://git@github.com/kenhia/kvllm.git?subdirectory=client#b0ef8ed8223d7937dfe12476c203a8d43608d1f9" }
+dependencies = [
+    { name = "httpx" },
+    { name = "langchain-openai" },
 ]
 
 [[package]]

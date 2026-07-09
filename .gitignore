@@ -25,3 +25,6 @@ Thumbs.db
 *.log
 *.tmp
 *.swp
+
+# korg sprint marker (local only)
+.korg-sprint-proposal
