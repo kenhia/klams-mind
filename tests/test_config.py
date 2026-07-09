@@ -79,3 +79,32 @@ def test_partial_toml_keeps_defaults(tmp_path: Path) -> None:
 
     assert cfg.klams.token == "just-a-token"
     assert "kubs0" in cfg.klams.base_url  # default retained
+
+
+def test_dotenv_supplies_env_overrides(tmp_path: Path) -> None:
+    """A `.env` file feeds the same override vars as the real environment."""
+    envfile = tmp_path / ".env"
+    envfile.write_text("KLAMS_TOKEN=from-dotenv\n")
+
+    cfg = load_config(path=None, env={}, dotenv_path=envfile)
+
+    assert cfg.klams.token == "from-dotenv"
+
+
+def test_real_env_beats_dotenv(tmp_path: Path) -> None:
+    envfile = tmp_path / ".env"
+    envfile.write_text("KLAMS_TOKEN=from-dotenv\n")
+
+    cfg = load_config(path=None, env={"KLAMS_TOKEN": "from-env"}, dotenv_path=envfile)
+
+    assert cfg.klams.token == "from-env"
+
+
+def test_injected_env_does_not_autoload_dotenv(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Tests that inject `env` stay isolated from any real ./.env in cwd."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("KLAMS_TOKEN=leaked\n")
+
+    cfg = load_config(path=None, env={})
+
+    assert cfg.klams.token == ""  # ./.env not auto-loaded when env is injected

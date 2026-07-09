@@ -48,6 +48,26 @@ uv run klams-mind smoke --json   # same, machine-readable
 one memory search, and makes one LLM call through the configured
 endpoint. Exit 0 means all four legs work.
 
+### Retrieval evals
+
+```sh
+uv run klams-mind eval run evals/suites/homelab-retrieval.toml
+uv run klams-mind eval run <suite> --json           # machine-readable
+uv run klams-mind eval run <suite> --out report.md  # also write markdown
+```
+
+A suite is a TOML file of queries, each with retrieval checks run against
+klams `memory_search` (deterministic — no LLM in the loop):
+
+- `substring` — expected text appears in retrieved content (content recall)
+- `source_cited` — expected source/tag appears among the hits (source recall)
+- `no_hallucination` — a forbidden fragment is *absent* from all hits (precision)
+
+Exit code is **0** if every check passes, **1** if any check fails, **2**
+for a bad suite file — so CI can gate on it. Suites live in
+[evals/suites/](evals/suites/); a committed baseline report is in
+[evals/baselines/](evals/baselines/) as the retrieval regression bar.
+
 ### Configuration
 
 Defaults target the homelab (klams at `kubs0:7777`, kvllm at
@@ -56,8 +76,10 @@ copy [config.example.toml](config.example.toml) to
 `~/.config/klams-mind/config.toml` (or point `KLAMS_MIND_CONFIG` at a
 file). Environment variables beat the file: `KLAMS_URL`, `KLAMS_TOKEN`,
 `KLAMS_MIND_MODEL_URL`, `KLAMS_MIND_MODEL_NAME`,
-`KLAMS_MIND_MODEL_API_KEY`. The klams token is required for anything
-beyond `/healthz`; keep it out of the repo.
+`KLAMS_MIND_MODEL_API_KEY`. A `./.env` is auto-loaded (real environment
+variables still win), so dropping `KLAMS_TOKEN=...` in `.env` is enough
+for live runs — `.env` is gitignored; keep the token out of the repo.
+The klams token is required for anything beyond `/healthz`.
 
 Note: klams exposes `register_author` / `memory_search` / `memory_add`
 only as MCP tools (Streamable HTTP at `{KLAMS_URL}/mcp`), not REST —

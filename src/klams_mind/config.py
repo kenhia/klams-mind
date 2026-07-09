@@ -10,6 +10,7 @@ import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 
+from dotenv import dotenv_values
 from pydantic import BaseModel
 
 DEFAULT_CONFIG_PATH = Path("~/.config/klams-mind/config.toml")
@@ -46,15 +47,29 @@ class Config(BaseModel):
 def load_config(
     path: Path | None = None,
     env: Mapping[str, str] | None = None,
+    dotenv_path: Path | None = None,
 ) -> Config:
-    """Load config; ``path`` beats ``KLAMS_MIND_CONFIG`` beats the default.
+    """Load config; env/``.env`` overrides beat ``path`` beats
+    ``KLAMS_MIND_CONFIG`` beats the homelab defaults. A missing file is
+    fine.
 
-    A missing file is fine — defaults target the homelab directly.
+    On the real-run path (``env`` unset) a ``./.env`` is auto-loaded so
+    live runs pick up ``KLAMS_TOKEN`` without exporting it; the real
+    environment still wins over ``.env``. Tests that inject ``env`` stay
+    isolated — pass ``dotenv_path`` explicitly to exercise ``.env``.
     """
+    autoload = env is None
     if env is None:
         env = os.environ
+    if dotenv_path is None and autoload:
+        dotenv_path = Path(".env")
 
-    file = path or Path(env.get("KLAMS_MIND_CONFIG", "") or DEFAULT_CONFIG_PATH)
+    dotenv_map: dict[str, str] = {}
+    if dotenv_path is not None and Path(dotenv_path).expanduser().is_file():
+        dotenv_map = {k: v for k, v in dotenv_values(dotenv_path).items() if v is not None}
+    effective = {**dotenv_map, **env}  # real env beats .env
+
+    file = path or Path(effective.get("KLAMS_MIND_CONFIG", "") or DEFAULT_CONFIG_PATH)
     file = file.expanduser()
 
     data: dict[str, dict[str, str]] = {}
@@ -63,7 +78,7 @@ def load_config(
             data = tomllib.load(fh)
 
     for var, (section, field) in _ENV_OVERRIDES.items():
-        if var in env:
-            data.setdefault(section, {})[field] = env[var]
+        if var in effective:
+            data.setdefault(section, {})[field] = effective[var]
 
     return Config.model_validate(data)
