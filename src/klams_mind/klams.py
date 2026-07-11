@@ -127,6 +127,18 @@ class RegisteredAuthor(BaseModel):
     created_at: datetime
 
 
+class DissentProposed(BaseModel):
+    """Result of `dissent_propose`; the dissent lands pending, resolved
+    by a human in the viewport. `deduped` is True when this proposal
+    matched an existing pending `(fact_id, payload)` and bumped its
+    submission count instead of creating a new row."""
+
+    dissent_id: UUID
+    fact_id: UUID
+    status: str
+    deduped: bool
+
+
 # --- client -------------------------------------------------------------------
 
 
@@ -224,6 +236,36 @@ class KlamsClient:
             "payload": payload,
         }
         return _memory.validate_python(await self._call("memory_add", args))
+
+    async def memory_delete(self, *, author_id: str, memory_id: str) -> None:
+        """Soft-delete a fact or knowledge memory by id (idempotent)."""
+        await self._call("memory_delete", {"author_id": author_id, "id": memory_id})
+
+    async def dissent_propose(
+        self,
+        *,
+        fact_id: str,
+        proposed_payload: dict[str, Any],
+        reason: str,
+        author_id: str | None = None,
+        contradicting_memory_id: str | None = None,
+    ) -> DissentProposed:
+        """File a dissent against a live canonical fact.
+
+        `proposed_payload` must be a JSON object (klams rejects scalars).
+        `author_id` defaults to the caller's bearer identity; pass it to
+        attribute the write to a specific registered author.
+        """
+        args: dict[str, Any] = {
+            "fact_id": fact_id,
+            "proposed_payload": proposed_payload,
+            "reason": reason,
+        }
+        if author_id is not None:
+            args["author_id"] = author_id
+        if contradicting_memory_id is not None:
+            args["contradicting_memory_id"] = contradicting_memory_id
+        return DissentProposed.model_validate(await self._call("dissent_propose", args))
 
     async def _call(self, tool: str, args: dict[str, Any]) -> Any:
         if self._tool_caller is None:

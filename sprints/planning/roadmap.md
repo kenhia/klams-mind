@@ -2,10 +2,9 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-07-08 (001–004 shipped; 005 extraction moved out — in
-flight on `005-extraction`; queue was renumbered 005+ after the
-unplanned 003 client-lib and 004 scored-retrieval sprints consumed the
-numbers it had penciled in)  
+**Date:** 2026-07-09 (001–006 shipped; 007 consolidation is next.
+Queue was renumbered 005+ after the unplanned 003 client-lib and 004
+scored-retrieval sprints consumed the numbers it had penciled in.)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -37,31 +36,23 @@ that queue.
 
 ## Sprint queue
 
-### 006 — Semantic contradiction detection (next)
-
-The headline feature: find memories that contradict in *meaning*.
-
-1. Candidate pairing (embedding-similarity buckets via klams search;
-   don't O(n²) the corpus), then LLM judgment with a
-   refute-by-default prompt.
-2. File dissents through the klams **MCP dissent-proposal tool**
-   (klams sprint 015 shipped it; `dissent_propose` is live on kubs0 as
-   of the 2026-07-08 deploy — contract: target fact + proposed
-   correction + reason, optionally citing the contradicting memory;
-   write scope).
-3. Resolution stays human, in the klams viewport `/dissents` page.
-
-Acceptance: seeded contradictory facts are detected and appear as
-pending dissents in the viewport; false-positive rate on a
-non-contradictory sample is measured and recorded.
-
-### 007 — Consolidation
+### 007 — Consolidation (next)
 
 Decay-informed maintenance passes: merge near-duplicates, summarize
 stale clusters, propose prunes. Propose-first like extraction; uses
 klams paging (`GET /v1/memories`) and decay/trust signals. Scope
 deliberately vague until the eval, extraction, and contradiction
 sprints teach us what the corpus needs.
+
+**What 006 learned:** the live corpus on kubs0 is *entirely*
+`knowledge` — zero `fact`/`event` memories (extraction writes
+knowledge; facts arrive via klams's Ansible/structured paths). Two
+consequences for 007: (1) consolidation should target knowledge
+near-duplicates, since that is what actually exists; (2) contradiction
+detection has nothing live to run on until facts start landing — worth
+raising with klams whether extraction should also emit facts, or
+whether knowledge-vs-knowledge contradiction (which has no
+`dissent_propose` path) needs a different surface.
 
 ### Later / unscheduled
 

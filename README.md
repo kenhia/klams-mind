@@ -88,6 +88,29 @@ via `memory_search`) are flagged `duplicate`. Dry-run is the default;
 `--apply` writes the survivors via `memory_add` under the klams-mind
 author, tagged `session-extract` with `source_path` = the transcript.
 
+### Contradiction detection
+
+```sh
+uv run klams-mind contradict run "<seed query>"          # dry-run: propose only
+uv run klams-mind contradict run "<seed query>" --apply   # file dissents
+uv run klams-mind contradict run "<seed query>" --json --out report.md
+uv run klams-mind contradict run "<seed query>" --top 30 --neighbours 5
+```
+
+Finds facts that contradict **in meaning** — the same service on two
+hosts, one setting given two incompatible values — which klams's
+write-time trust check (same-fact only) can't catch. The seed query
+pulls a working set of facts; each is paired with its embedding-
+similarity neighbours (via `memory_search`, kind `fact`) so the corpus
+is never compared O(n²). A **refute-by-default** judge rules on each
+pair: only genuine mutual exclusivity counts, and a claimed
+contradiction with no concrete, object-shaped correction is
+`unactionable` — refused, never filed. Dry-run is the default;
+`--apply` files a dissent via the klams MCP `dissent_propose` tool
+against the fact judged wrong (citing the conflicting one), under the
+klams-mind author. Dissents land as lowest-trust proposals and are
+resolved by a human in the viewport `/dissents` page.
+
 ### Configuration
 
 Defaults target the homelab (klams at `kubs0:7777`, kvllm at
