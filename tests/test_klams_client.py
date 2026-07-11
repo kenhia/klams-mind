@@ -16,6 +16,7 @@ from mcp.types import CallToolResult, TextContent
 
 from klams_mind.config import KlamsConfig
 from klams_mind.klams import (
+    DissentProposed,
     FactMemory,
     KlamsClient,
     KlamsError,
@@ -215,6 +216,73 @@ async def test_add_fact_builds_flattened_payload() -> None:
     assert args["kind"] == "fact"
     assert args["fact_type"] == "EnvFact"
     assert isinstance(memory, FactMemory)
+
+
+# --- dissent_propose --------------------------------------------------------
+
+# klams serializes the ids as simple (dash-less) UUIDs; pydantic parses both.
+DISSENT_OUT = {
+    "dissent_id": "01980000000070008000000000000cd0",
+    "fact_id": "019800000000700080000000000000a0",
+    "status": "pending",
+    "deduped": False,
+}
+
+
+async def test_dissent_propose_builds_args_and_parses() -> None:
+    caller = FakeToolCaller(tool_ok(DISSENT_OUT))
+    client = make_client(caller)
+
+    out = await client.dissent_propose(
+        fact_id="019800000000700080000000000000a0",
+        proposed_payload={"host": "kai", "service": "klams"},
+        reason="a newer fact places klams on kai, not kubs0",
+        author_id=REGISTER_AUTHOR_OUT["author_id"],
+        contradicting_memory_id="019800000000700080000000000000b0",
+    )
+
+    name, args = caller.calls[0]
+    assert name == "dissent_propose"
+    assert args["fact_id"] == "019800000000700080000000000000a0"
+    assert args["proposed_payload"] == {"host": "kai", "service": "klams"}
+    assert args["reason"].startswith("a newer fact")
+    assert args["author_id"] == REGISTER_AUTHOR_OUT["author_id"]
+    assert args["contradicting_memory_id"] == "019800000000700080000000000000b0"
+    assert isinstance(out, DissentProposed)
+    assert out.status == "pending"
+    assert out.deduped is False
+    assert str(out.fact_id) == "01980000-0000-7000-8000-0000000000a0"
+
+
+async def test_dissent_propose_omits_unset_optionals() -> None:
+    caller = FakeToolCaller(tool_ok(DISSENT_OUT))
+    client = make_client(caller)
+
+    await client.dissent_propose(
+        fact_id="019800000000700080000000000000a0",
+        proposed_payload={"host": "kai"},
+        reason="correction",
+    )
+
+    _, args = caller.calls[0]
+    assert "author_id" not in args
+    assert "contradicting_memory_id" not in args
+
+
+# --- memory_delete ----------------------------------------------------------
+
+
+async def test_memory_delete_passes_author_and_id() -> None:
+    caller = FakeToolCaller(tool_ok({"deleted": True}))
+    client = make_client(caller)
+
+    await client.memory_delete(
+        author_id=REGISTER_AUTHOR_OUT["author_id"], memory_id=str(FACT_MEMORY["id"])
+    )
+
+    name, args = caller.calls[0]
+    assert name == "memory_delete"
+    assert args == {"author_id": REGISTER_AUTHOR_OUT["author_id"], "id": str(FACT_MEMORY["id"])}
 
 
 # --- errors -----------------------------------------------------------------

@@ -12,6 +12,11 @@ import typer
 
 from klams_mind import __version__
 from klams_mind.config import Config, load_config
+from klams_mind.contradict.chain import build_contradiction_chain
+from klams_mind.contradict.pairing import find_candidate_pairs
+from klams_mind.contradict.report import to_json as contradict_to_json
+from klams_mind.contradict.report import to_markdown as contradict_to_markdown
+from klams_mind.contradict.runner import DetectionResult, detect_contradictions
 from klams_mind.eval.report import Report, build_report, to_json, to_markdown
 from klams_mind.eval.runner import KlamsRetriever, Retriever, run_suite
 from klams_mind.eval.suite import EvalLoadError, Suite, load_suite
@@ -19,6 +24,7 @@ from klams_mind.extract.chain import build_extraction_chain
 from klams_mind.extract.report import to_json as extraction_to_json
 from klams_mind.extract.report import to_markdown as extraction_to_markdown
 from klams_mind.extract.runner import ExtractionResult, extract_windows
+from klams_mind.klams import FactMemory
 from klams_mind.klams import connect as _connect
 from klams_mind.llm import build_chat as _build_chat
 from klams_mind.llm import ping
@@ -30,6 +36,8 @@ eval_app = typer.Typer(help="Retrieval-quality evals against klams.")
 app.add_typer(eval_app, name="eval")
 extract_app = typer.Typer(help="Distill durable facts from session transcripts into klams.")
 app.add_typer(extract_app, name="extract")
+contradict_app = typer.Typer(help="Find facts that contradict in meaning; propose dissents.")
+app.add_typer(contradict_app, name="contradict")
 
 
 class SmokeError(Exception):
@@ -273,3 +281,82 @@ def extract_run(
         out.write_text(markdown)
         typer.echo(f"wrote {out}", err=True)
     typer.echo(extraction_to_json(result) if json_output else markdown)
+
+
+async def run_contradict(
+    query: str,
+    cfg: Config,
+    *,
+    apply: bool,
+    neighbours: int,
+    top: int,
+    connect: Any = _connect,
+    resolve_model_name: Any = _resolve_model_name,
+    build_chat: Any = _build_chat,
+    chain_factory: Any = build_contradiction_chain,
+) -> DetectionResult:
+    """Pull a fact working set for `query`, pair by similarity, judge, file."""
+    model_name = await resolve_model_name(cfg.model)
+    chain = chain_factory(build_chat(cfg.model.model_copy(update={"name": model_name})))
+    async with connect(cfg.klams) as client:
+        hits = await client.memory_search(query, kinds=["fact"], top_k=top)
+        seeds = [h.memory for h in hits if isinstance(h.memory, FactMemory)]
+        pairs = await find_candidate_pairs(client, seeds, neighbours=neighbours)
+        author_id: str | None = None
+        if apply:
+            author = await client.register_author(
+                agent_name="klams-mind",
+                model=model_name,
+                client_app="klams-mind",
+                client_version=__version__,
+            )
+            author_id = str(author.author_id)
+        return await detect_contradictions(
+            pairs, chain, client, query=query, apply=apply, author_id=author_id
+        )
+
+
+@contradict_app.command("run")
+def contradict_run(
+    query: Annotated[
+        str,
+        typer.Argument(help="Seed query — the fact neighbourhood to check for contradictions."),
+    ],
+    apply: Annotated[
+        bool, typer.Option("--apply", help="File dissents for contradictions (default: dry-run).")
+    ] = False,
+    top: Annotated[
+        int, typer.Option(help="Size of the fact working set from the seed query.")
+    ] = 30,
+    neighbours: Annotated[
+        int, typer.Option(help="Similarity neighbours paired per seed fact.")
+    ] = 5,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit the report as JSON on stdout.")
+    ] = False,
+    out: Annotated[
+        Path | None, typer.Option(help="Also write the markdown report to this file.")
+    ] = None,
+    config: Annotated[
+        Path | None, typer.Option(help="Config file (default: KLAMS_MIND_CONFIG).")
+    ] = None,
+    debug: Annotated[bool, typer.Option(help="Re-raise failures with full tracebacks.")] = False,
+) -> None:
+    """Detect semantic contradictions in a fact neighbourhood; propose (or --apply) dissents."""
+    cfg = load_config(path=config)
+    try:
+        result = asyncio.run(
+            run_contradict(query, cfg, apply=apply, neighbours=neighbours, top=top)
+        )
+    except Exception as exc:
+        if debug:
+            raise
+        typer.echo(f"contradict: failed: {exc}", err=True)
+        typer.echo("check klams (kubs0:7777), kvllm (kai:8000), and KLAMS_TOKEN", err=True)
+        raise typer.Exit(1) from exc
+
+    markdown = contradict_to_markdown(result)
+    if out is not None:
+        out.write_text(markdown)
+        typer.echo(f"wrote {out}", err=True)
+    typer.echo(contradict_to_json(result) if json_output else markdown)
