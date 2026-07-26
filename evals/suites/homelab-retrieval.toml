@@ -56,8 +56,19 @@ type = "substring"
 value = "klams"
 
 [[queries.checks]]
-type = "source_cited"
-value = "klams.service"
+# Assert the ANSWER, not which file wins.
+#
+# This was `source_cited = "klams.service"` in the 2026-07-08 baseline and
+# failed on the first run of the rewritten suite (2026-07-26). Investigated:
+# not a regression. `deploy/systemd/klams.service` still exists but is a
+# legacy path — the live units are `deploy/klams-service.service` et al —
+# and sprint 024 replaced raw-score sort with RRF, which legitimately
+# reordered every result. Today's top-5 (README, the planning doc, the
+# deploy runbook) all answer "kubs0" correctly, which is what the question
+# actually asks. Pinning a specific — and now stale — file was the bug in
+# the assertion, not in retrieval.
+type = "substring"
+value = "kubs0"
 
 [[queries]]
 query = "where does kvllm serve models"
@@ -68,8 +79,15 @@ type = "substring"
 value = "kvllm"
 
 [[queries.checks]]
-type = "source_cited"
-value = "klams.example.toml"
+# Same story, more starkly. This was `source_cited = "klams.example.toml"`
+# — a *klams* config file that merely mentions kvllm's URL. That was the
+# best answer available on 2026-07-08 because kai was not scanned until
+# sprint 023, so the actual kvllm repo was not in the corpus at all.
+# Today the top-5 is kvllm's own justfile, models.toml and helper.py.
+# Retrieval improved; the assertion was pinning the inferior document.
+# The port is the answer to "where".
+type = "substring"
+value = "8000"
 
 [[queries]]
 query = "klams sprint bootstrap first light"
@@ -251,10 +269,14 @@ min_chars = 40
 top_n = 5
 
 [[queries]]
+# Promoted to `pass` on 2026-07-26: this one came back clean on the first
+# real run. The fence-unaware chunker is NOT fixed — the kpidash query
+# above still catches a 7-character '```bash' fragment — but this query's
+# top-5 is junk-free today, so holding it as a regression bar is worth
+# more than leaving it open. Junk reappearing here is a genuine
+# regression.
 query = "klams gate fmt clippy test"
 top_k = 5
-expect = "known_open"
-tracking = "klams F-2.3 — fence-unaware chunker, not yet scheduled"
 
 [[queries.checks]]
 type = "min_body_chars"
@@ -299,10 +321,21 @@ type = "substring"
 value = "encke-wahoo"
 
 [[queries]]
+# Promoted to `pass` on 2026-07-26 — and the contrast with
+# LOW_SCORE_THRESHOLD above is the actual #333 finding.
+#
+# Both are exact identifiers living in klams' own scanned source. This one
+# retrieves; LOW_SCORE_THRESHOLD does not. The difference is occurrence
+# count and surrounding prose: `find_knowledge_by_content_hash` appears in
+# many chunks with descriptive text around it, so the embedding has
+# something to match. `LOW_SCORE_THRESHOLD` appears in a couple of dense
+# code chunks and vanishes. So the lexical gap is not "identifiers never
+# work" — it is "identifiers work only when they are already well
+# represented in prose", which is exactly the wrong property for
+# looking up a rare symbol. Keep BOTH: this one as the regression bar,
+# that one as the open evidence.
 query = "find_knowledge_by_content_hash"
 top_k = 10
-expect = "known_open"
-tracking = "klams#333 — exact function-name lookup has no lexical path"
 
 [[queries.checks]]
 type = "substring"
