@@ -17,6 +17,7 @@ from klams_mind.contradict.pairing import find_candidate_pairs
 from klams_mind.contradict.report import to_json as contradict_to_json
 from klams_mind.contradict.report import to_markdown as contradict_to_markdown
 from klams_mind.contradict.runner import DetectionResult, detect_contradictions
+from klams_mind.eval.provenance import Provenance, now_stamp, parse_provenance, suite_digest
 from klams_mind.eval.report import Report, build_report, to_json, to_markdown
 from klams_mind.eval.runner import KlamsRetriever, Retriever, run_suite
 from klams_mind.eval.suite import EvalLoadError, Suite, load_suite
@@ -150,18 +151,40 @@ def smoke(
         _print_human(report)
 
 
+async def _klams_version(client: Any) -> str | None:
+    """Read the version off `/healthz`, or None if it can't be reached.
+
+    klams#676: provenance is advisory. Retrieval already proves klams is
+    up; failing an otherwise-good eval because the health probe hiccuped
+    would trade a real signal for a label.
+    """
+    try:
+        return (await client.healthz()).version
+    except Exception:
+        return None
+
+
 async def run_eval(
     suite: Suite,
     cfg: Config,
     *,
+    suite_path: Path,
     connect: Any = _connect,
     retriever_factory: Any = KlamsRetriever,
+    now: Any = now_stamp,
 ) -> Report:
     """Run a suite against live klams retrieval and aggregate a report."""
     async with connect(cfg.klams) as client:
+        version = await _klams_version(client)
         retriever: Retriever = retriever_factory(client)
         results = await run_suite(suite, retriever)
-    return build_report(suite.name, results)
+    provenance = Provenance(
+        run_at=now(),
+        suite_file=suite_path.name,
+        suite_hash=suite_digest(suite_path),
+        klams_version=version,
+    )
+    return build_report(suite.name, results, provenance=provenance)
 
 
 @eval_app.command("run")
@@ -172,6 +195,10 @@ def eval_run(
     ] = False,
     out: Annotated[
         Path | None, typer.Option(help="Also write the markdown report to this file.")
+    ] = None,
+    baseline: Annotated[
+        Path | None,
+        typer.Option(help="Report to compare provenance against (default: --out, if it exists)."),
     ] = None,
     config: Annotated[
         Path | None, typer.Option(help="Config file (default: KLAMS_MIND_CONFIG).")
@@ -193,8 +220,16 @@ def eval_run(
     except EvalLoadError as exc:
         typer.echo(f"eval: {exc}", err=True)
         raise typer.Exit(2) from exc
+
+    # klams#676: read the artifact we are about to compare against *before*
+    # `--out` overwrites it. Refreshing the baseline is the documented way
+    # to regenerate, and that is exactly when "you are replacing something
+    # five sprints old" is worth hearing.
+    baseline_path = baseline if baseline is not None else out
+    prior = _read_provenance(baseline_path)
+
     try:
-        report = asyncio.run(run_eval(suite, cfg))
+        report = asyncio.run(run_eval(suite, cfg, suite_path=suite_path))
     except Exception as exc:
         if debug:
             raise
@@ -202,12 +237,21 @@ def eval_run(
         typer.echo("check klams (kubs0:7777) and KLAMS_TOKEN", err=True)
         raise typer.Exit(1) from exc
 
-    markdown = to_markdown(report)
     if out is not None:
-        out.write_text(markdown)
+        # Written before `baseline` is attached: the drift note describes
+        # this run, not the artifact. A refreshed baseline must not carry a
+        # note about the baseline it replaced.
+        out.write_text(to_markdown(report))
         typer.echo(f"wrote {out}", err=True)
-    typer.echo(to_json(report) if json_output else markdown)
+    report.baseline = prior
+    typer.echo(to_json(report) if json_output else to_markdown(report))
     raise typer.Exit(0 if report.regressions == 0 else 1)
+
+
+def _read_provenance(path: Path | None) -> Provenance | None:
+    if path is None or not path.exists():
+        return None
+    return parse_provenance(path.read_text())
 
 
 async def run_extract(

@@ -1,8 +1,10 @@
 """Reporter: aggregate stats, markdown, and JSON."""
 
 import json
+from dataclasses import replace
 
 from klams_mind.eval.checks import CheckResult, RetrievedItem
+from klams_mind.eval.provenance import Provenance, parse_provenance
 from klams_mind.eval.report import build_report, to_json, to_markdown
 from klams_mind.eval.runner import EvalQueryResult
 from klams_mind.eval.suite import Check, CheckType
@@ -135,3 +137,64 @@ def test_markdown_says_regression_when_a_pass_query_fails() -> None:
     md = to_markdown(build_report("t", [_result("broke", False)]))
     assert "REGRESSION" in md
     assert "Regressions (1)" in md
+
+
+# --- klams#676: reports and baselines state what they ran against ----------
+
+PROV = Provenance(
+    run_at="2026-07-26T04:10:27Z",
+    suite_file="homelab-retrieval.toml",
+    suite_hash="sha256:ab12cd34ef56",
+    klams_version="0.1.26",
+)
+CLEAN = [RESULTS[0]]
+
+
+def test_markdown_stamps_provenance_and_round_trips_it() -> None:
+    md = to_markdown(build_report("homelab", CLEAN, provenance=PROV))
+    assert "2026-07-26T04:10:27Z" in md
+    assert "0.1.26" in md
+    assert "sha256:ab12cd34ef56" in md
+    # It must parse back, or the next run cannot compare against this file.
+    assert parse_provenance(md) == PROV
+
+
+def test_markdown_omits_the_block_when_no_provenance_is_supplied() -> None:
+    assert parse_provenance(to_markdown(build_report("homelab", CLEAN))) is None
+
+
+def test_markdown_flags_a_klams_version_mismatch_against_the_baseline() -> None:
+    """The one line that would have short-circuited sprint 026's detour."""
+    baseline = replace(PROV, klams_version="0.1.19", run_at="2026-07-08T00:00:00Z")
+    md = to_markdown(build_report("homelab", CLEAN, provenance=PROV, baseline=baseline))
+    assert "Baseline captured against klams 0.1.19; running against 0.1.26" in md
+    assert "REGRESSION" not in md, "provenance drift is informational, never a failure"
+
+
+def test_markdown_notes_a_suite_change_since_the_baseline() -> None:
+    baseline = replace(PROV, suite_hash="sha256:000000000000")
+    md = to_markdown(build_report("homelab", CLEAN, provenance=PROV, baseline=baseline))
+    assert "suite has changed since the baseline" in md
+
+
+def test_markdown_is_silent_when_the_baseline_matches() -> None:
+    md = to_markdown(build_report("homelab", CLEAN, provenance=PROV, baseline=PROV))
+    assert "Baseline captured against" not in md
+    assert "suite has changed" not in md
+
+
+def test_json_carries_provenance_and_baseline() -> None:
+    baseline = replace(PROV, klams_version="0.1.19")
+    payload = json.loads(to_json(build_report("h", CLEAN, provenance=PROV, baseline=baseline)))
+    assert payload["provenance"] == {
+        "run_at": "2026-07-26T04:10:27Z",
+        "suite_file": "homelab-retrieval.toml",
+        "suite_hash": "sha256:ab12cd34ef56",
+        "klams_version": "0.1.26",
+    }
+    assert payload["baseline"]["klams_version"] == "0.1.19"
+
+
+def test_json_baseline_is_null_when_there_is_nothing_to_compare() -> None:
+    payload = json.loads(to_json(build_report("h", CLEAN, provenance=PROV)))
+    assert payload["baseline"] is None
