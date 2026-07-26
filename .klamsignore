@@ -1,0 +1,17 @@
+# Keep the eval harness out of the corpus it measures.
+#
+# klams-mind sprint 007. `evals/suites/*.toml` is text engineered to
+# lexically match every query it contains, so once the scanner indexes
+# it, it wins those queries outright — the suite starts measuring
+# itself. Observed 2026-07-26: the suite surfaced at rank 0-1 for
+# several queries, and a `no_hallucination` check failed because its own
+# forbidden term ("Duke Courses") was found *in the suite file*.
+#
+# `evals/baselines/*.md` is worse: it is generated output carrying every
+# query plus the paths that answered it, so each refreshed baseline
+# contaminates the next run a little more.
+#
+# klams's scanner honours a repo-root .klamsignore (klams-scanner
+# walk.rs) and prunes chunks for files it no longer walks, so this
+# self-heals on the next scan cycle.
+evals/
