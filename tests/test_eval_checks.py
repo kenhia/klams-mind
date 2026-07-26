@@ -97,3 +97,141 @@ def test_positive_checks_fail_on_no_hits() -> None:
 def test_no_hallucination_passes_on_no_hits() -> None:
     # nothing retrieved -> nothing spurious surfaced.
     assert evaluate_check(check("no_hallucination", "anything"), []).passed
+
+
+# --- klams sprint 026 (#643): the checks that measure what was broken ------
+#
+# The three checks above all pass on scanner chunks, which is why the
+# suite scored 4/4 while every klams#628 failure was happening live.
+
+
+def k(
+    content: str,
+    source: str = "/src/x.md",
+    content_hash: str | None = None,
+    heading_path: str | None = None,
+    memory_id: str = "",
+) -> RetrievedItem:
+    return RetrievedItem(
+        content=content,
+        source=source,
+        kind="knowledge",
+        content_hash=content_hash,
+        heading_path=heading_path,
+        memory_id=memory_id,
+    )
+
+
+# --- no_duplicates: klams #641's invariant ---------------------------------
+
+
+def test_no_duplicates_fails_on_a_cross_host_pair() -> None:
+    # The live failure shape: same chunk, both hosts, both in the page.
+    hits = [
+        k("body", "/kai/x.md", content_hash="aaa"),
+        k("body", "/kubs0/x.md", content_hash="aaa"),
+    ]
+    r = evaluate_check(Check(type="no_duplicates"), hits)
+    assert not r.passed
+    assert "/kai/x.md" in r.detail and "/kubs0/x.md" in r.detail
+
+
+def test_no_duplicates_passes_on_distinct_content() -> None:
+    hits = [k("a", content_hash="aaa"), k("b", content_hash="bbb")]
+    assert evaluate_check(Check(type="no_duplicates"), hits).passed
+
+
+def test_no_duplicates_ignores_hits_without_a_hash() -> None:
+    # Facts, events and pre-022 points carry no hash. Two of them must
+    # not read as duplicates of each other.
+    hits = [
+        RetrievedItem(content="a", source="fact:EnvFact", kind="fact"),
+        RetrievedItem(content="b", source="fact:EnvFact", kind="fact"),
+    ]
+    r = evaluate_check(Check(type="no_duplicates"), hits)
+    assert r.passed
+    assert "no hashed results" in r.detail
+
+
+def test_no_duplicates_honours_top_n() -> None:
+    hits = [
+        k("a", content_hash="aaa"),
+        k("b", content_hash="bbb"),
+        k("a again", content_hash="aaa"),
+    ]
+    assert evaluate_check(Check(type="no_duplicates", top_n=2), hits).passed
+    assert not evaluate_check(Check(type="no_duplicates"), hits).passed
+
+
+# --- min_body_chars: the junk ceiling (klams F-2.3) ------------------------
+
+
+def test_min_body_chars_strips_the_breadcrumb_before_measuring() -> None:
+    # The exact observed junk chunk: a breadcrumb plus an opening fence.
+    # It LOOKS like 40+ chars and scores 0.956, but its body is empty.
+    junk = k(
+        "kpidash > Dashboard build\n\n```bash",
+        heading_path="kpidash > Dashboard build",
+    )
+    r = evaluate_check(Check(type="min_body_chars", min_chars=40), [junk])
+    assert not r.passed
+    assert "after stripping breadcrumb" in r.detail
+
+
+def test_min_body_chars_passes_real_content() -> None:
+    good = k(
+        "klams > Setup\n\nThe service binds 0.0.0.0:7777 so the viewport "
+        "on the LAN can reach it; UFW restricts the port to the subnet.",
+        heading_path="klams > Setup",
+    )
+    assert evaluate_check(Check(type="min_body_chars", min_chars=40), [good]).passed
+
+
+def test_min_body_chars_ignores_facts_and_events() -> None:
+    # A fact payload is legitimately short; the junk ceiling is a claim
+    # about chunked prose, not about structured records.
+    fact = RetrievedItem(content='EnvFact {"k": 1}', source="fact:EnvFact", kind="fact")
+    assert evaluate_check(Check(type="min_body_chars", min_chars=40), [fact]).passed
+
+
+def test_min_body_chars_requires_min_chars() -> None:
+    r = evaluate_check(Check(type="min_body_chars"), [k("x")])
+    assert not r.passed
+    assert "requires min_chars" in r.detail
+
+
+# --- memory_id: curated-beats-bulk (klams #628) ----------------------------
+
+
+def test_memory_id_matches_on_prefix() -> None:
+    hits = [k("gotcha", memory_id="019f95dc-df08-70e3-bce0-f209cb7402c4")]
+    assert evaluate_check(Check(type="memory_id", value="019f95dc-df08"), hits).passed
+
+
+def test_memory_id_fails_when_the_memory_is_absent() -> None:
+    # klams#628's Query A: the purpose-written gotcha did not appear at all.
+    hits = [k("some multae-viae spec chunk", memory_id="deadbeef-0000")]
+    r = evaluate_check(Check(type="memory_id", value="019f95dc-df08"), hits)
+    assert not r.passed
+    assert "absent" in r.detail
+
+
+def test_memory_id_fails_when_outranked_even_though_present() -> None:
+    # The teeth. Presence alone would have passed while the bug was live
+    # — #628's complaint was that the right memory LOST its slot.
+    hits = [
+        k("bulk chunk", memory_id="aaaa"),
+        k("bulk chunk", memory_id="bbbb"),
+        k("the gotcha", memory_id="019f95dc-df08-70e3"),
+    ]
+    r = evaluate_check(Check(type="memory_id", value="019f95dc-df08", max_rank=1), hits)
+    assert not r.passed
+    assert "rank 2" in r.detail and "outranked" in r.detail
+
+
+def test_memory_id_passes_within_max_rank() -> None:
+    hits = [
+        k("bulk chunk", memory_id="aaaa"),
+        k("the gotcha", memory_id="019f95dc-df08-70e3"),
+    ]
+    assert evaluate_check(Check(type="memory_id", value="019f95dc-df08", max_rank=1), hits).passed

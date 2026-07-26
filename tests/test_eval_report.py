@@ -87,3 +87,51 @@ def test_json_roundtrips_and_has_keys() -> None:
     assert payload["results"][1]["checks"][0]["type"] == "substring"
     hit = payload["results"][0]["hits"][0]
     assert hit == {"source": "src/a.py", "kind": "knowledge", "score": 0.712, "source_rank": 0}
+
+
+# --- klams sprint 026 (#643): the gate counts regressions, not failures ----
+
+
+def _result(query: str, passed: bool, expect: str = "pass") -> EvalQueryResult:
+    check = Check(type="substring", value="x")
+    return EvalQueryResult(
+        query=query,
+        hit_count=1,
+        sources=["s"],
+        checks=[CheckResult(check, passed, "d")],
+        passed=passed,
+        expect=expect,
+    )
+
+
+def test_report_separates_regressions_from_known_open_failures() -> None:
+    report = build_report(
+        "t",
+        [
+            _result("ok", True),
+            _result("broke", False),
+            _result("tracked", False, expect="known_open"),
+        ],
+    )
+    assert report.failed == 2, "both failures are counted as failures"
+    assert report.regressions == 1, "only the unexpected one is a regression"
+    assert report.known_open == 1
+
+
+def test_report_counts_a_newly_fixed_known_open_query() -> None:
+    report = build_report("t", [_result("fixed", True, expect="known_open")])
+    assert report.newly_fixed == 1
+    assert report.regressions == 0
+
+
+def test_markdown_says_ok_when_only_known_open_queries_fail() -> None:
+    md = to_markdown(build_report("t", [_result("tracked", False, expect="known_open")]))
+    assert "OK" in md
+    assert "REGRESSION" not in md
+    assert "Known open" in md
+
+
+def test_markdown_says_regression_when_a_pass_query_fails() -> None:
+    md = to_markdown(build_report("t", [_result("broke", False)]))
+    assert "REGRESSION" in md
+    assert "Regressions (1)" in md

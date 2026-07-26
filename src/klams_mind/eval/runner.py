@@ -29,6 +29,23 @@ class EvalQueryResult:
     checks: list[CheckResult]
     passed: bool
     hits: list[RetrievedItem] = field(default_factory=list)
+    # klams sprint 026 (#643) — see `EvalQuery.expect`.
+    expect: str = "pass"
+    tracking: str | None = None
+
+    @property
+    def is_regression(self) -> bool:
+        """A query that was supposed to pass and didn't. Fails the run."""
+        return self.expect == "pass" and not self.passed
+
+    @property
+    def is_newly_fixed(self) -> bool:
+        """A `known_open` query that now passes — the fix landed.
+
+        Not a failure, but it must be surfaced: leaving it marked open
+        means the next regression in it goes unnoticed.
+        """
+        return self.expect == "known_open" and self.passed
 
 
 async def run_suite(suite: Suite, retriever: Retriever) -> list[EvalQueryResult]:
@@ -44,6 +61,8 @@ async def run_suite(suite: Suite, retriever: Retriever) -> list[EvalQueryResult]
                 checks=checks,
                 passed=all(cr.passed for cr in checks),
                 hits=hits,
+                expect=q.expect,
+                tracking=q.tracking,
             )
         )
     return results
@@ -60,6 +79,10 @@ def _to_item(sm: ScoredMemory) -> RetrievedItem:
             kind=m.kind,
             score=sm.score,
             source_rank=sm.source_rank,
+            memory_id=str(m.id),
+            content_hash=m.content_hash,
+            heading_path=m.heading_path,
+            raw_score=sm.raw_score,
         )
     if m.kind == "fact":
         return RetrievedItem(
@@ -69,6 +92,8 @@ def _to_item(sm: ScoredMemory) -> RetrievedItem:
             kind=m.kind,
             score=sm.score,
             source_rank=sm.source_rank,
+            memory_id=str(m.id),
+            raw_score=sm.raw_score,
         )
     return RetrievedItem(
         content=f"{m.category} {json.dumps(m.payload)}",
@@ -77,6 +102,8 @@ def _to_item(sm: ScoredMemory) -> RetrievedItem:
         kind=m.kind,
         score=sm.score,
         source_rank=sm.source_rank,
+        memory_id=str(m.id),
+        raw_score=sm.raw_score,
     )
 
 

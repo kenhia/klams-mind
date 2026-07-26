@@ -65,9 +65,25 @@ class HealthSnapshot(BaseModel):
 
 
 class AuthorRef(BaseModel):
+    # klams sprint 026 (#641): the author's own id, so ownership can be
+    # reasoned about without a register_author round-trip.
+    id: UUID | None = None
     agent_name: str
     model: str | None = None
     repo: str | None = None
+
+
+class KnowledgeCopy(BaseModel):
+    """A duplicate that klams collapsed into a surviving hit.
+
+    klams sprint 026 (#641): the same chunk is stored once per host, so
+    ~44% of the corpus is duplicate content. klams now collapses them at
+    query time and lists what it absorbed here, keyed on content only.
+    """
+
+    id: UUID
+    host: str | None = None
+    file: str | None = None
 
 
 class _MemoryBase(BaseModel):
@@ -89,6 +105,18 @@ class KnowledgeMemory(_MemoryBase):
     text: str
     source_path: str | None = None
     repo: str | None = None
+    # klams sprint 023 (#409): host the source file lives on, so a hit is
+    # a fully-qualified (host, source_path) pair.
+    host: str | None = None
+    # klams sprint 026 (#641): the projection additions. `content_hash`
+    # is what the no-duplicates invariant asserts on; `heading_path` is
+    # the breadcrumb the chunker prepended, which the junk-ceiling check
+    # strips before measuring body length.
+    content_hash: str | None = None
+    heading_path: str | None = None
+    language: str | None = None
+    chunk_index: int | None = None
+    copies: list[KnowledgeCopy] = []
 
 
 class EventMemory(_MemoryBase):
@@ -114,6 +142,10 @@ class ScoredMemory(BaseModel):
 
     score: float
     source_rank: int
+    # klams sprint 024 (#332): post-RRF `score` is pure rank
+    # (1/(60+rank+1)) and carries no magnitude, so match quality lives
+    # here — the pre-fusion cosine / ts_rank.
+    raw_score: float | None = None
     memory: Memory
 
 

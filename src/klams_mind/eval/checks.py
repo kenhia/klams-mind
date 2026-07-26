@@ -30,6 +30,33 @@ class RetrievedItem:
     kind: str = ""
     score: float | None = None
     source_rank: int | None = None
+    # klams-026 (#641/#643) projection additions.
+    memory_id: str = ""
+    # Content hash — the no-duplicates invariant asserts on this.
+    content_hash: str | None = None
+    # Heading breadcrumb the chunker prepended. The junk ceiling strips
+    # it before measuring, because a breadcrumb makes an empty chunk look
+    # long *and* makes it a strong embedding match for the query.
+    heading_path: str | None = None
+    # Pre-fusion match quality. Post-RRF `score` is pure rank.
+    raw_score: float | None = None
+
+    def body(self) -> str:
+        """Content with the heading breadcrumb stripped.
+
+        klams' chunker prepends `heading_path` to the chunk text, so a
+        chunk whose real content is an empty code fence still presents as
+        a few dozen characters of heading. Measuring fragment-ness means
+        measuring what is left after that.
+        """
+        text = self.content
+        if not self.heading_path:
+            return text.strip()
+        head = self.heading_path.strip()
+        stripped = text.strip()
+        if stripped.startswith(head):
+            stripped = stripped[len(head) :]
+        return stripped.strip()
 
 
 @dataclass(frozen=True)
@@ -46,6 +73,12 @@ def evaluate_check(check: Check, hits: list[RetrievedItem]) -> CheckResult:
         return _source_cited(check, hits)
     if check.type == "no_hallucination":
         return _no_hallucination(check, hits)
+    if check.type == "no_duplicates":
+        return _no_duplicates(check, hits)
+    if check.type == "min_body_chars":
+        return _min_body_chars(check, hits)
+    if check.type == "memory_id":
+        return _memory_id(check, hits)
     return CheckResult(check, False, f"unknown check type {check.type!r}")
 
 
@@ -83,3 +116,89 @@ def _no_hallucination(check: Check, hits: list[RetrievedItem]) -> CheckResult:
         if needle in h.content.lower() or needle in h.source.lower():
             return CheckResult(check, False, f"forbidden {check.value!r} surfaced in {h.source}")
     return CheckResult(check, True, f"{check.value!r} absent from results")
+
+
+def _window(check: Check, hits: list[RetrievedItem]) -> list[RetrievedItem]:
+    """The slice of the page a check applies to (default: all of it)."""
+    return hits[: check.top_n] if check.top_n else hits
+
+
+def _no_duplicates(check: Check, hits: list[RetrievedItem]) -> CheckResult:
+    """No two results share a `content_hash` (klams #641's invariant).
+
+    klams stores the same chunk once per host, so before sprint 026 a
+    10-result page was reliably 5 duplicate pairs. Hits with no hash
+    (pre-022 points, facts, events) are skipped rather than treated as
+    mutually duplicate.
+    """
+    window = _window(check, hits)
+    seen: dict[str, RetrievedItem] = {}
+    for h in window:
+        if not h.content_hash:
+            continue
+        prior = seen.get(h.content_hash)
+        if prior is not None:
+            return CheckResult(
+                check,
+                False,
+                f"duplicate content_hash {h.content_hash[:12]}… shared by "
+                f"{prior.source!r} and {h.source!r}",
+            )
+        seen[h.content_hash] = h
+    if not seen:
+        # An all-facts page trivially satisfies this; say so rather than
+        # reporting a pass that proves nothing.
+        return CheckResult(check, True, f"no hashed results among {len(window)} hit(s)")
+    return CheckResult(check, True, f"{len(seen)} distinct content hashes in {len(window)} hit(s)")
+
+
+def _min_body_chars(check: Check, hits: list[RetrievedItem]) -> CheckResult:
+    """No result is a content-free fragment (klams F-2.3's junk ceiling).
+
+    The chunker is fence-unaware, so a shell comment inside a ```bash
+    block parses as a heading and closes the section right after the
+    opening fence. The resulting chunk is a breadcrumb plus ```bash — and
+    it scores *strongly*, because it is almost exactly the query's words
+    and nothing else (0.956 measured). Breadcrumb stripped, it is empty.
+    """
+    if check.min_chars is None:
+        return CheckResult(check, False, "min_body_chars check requires min_chars")
+    window = _window(check, hits)
+    for h in window:
+        if h.kind and h.kind != "knowledge":
+            continue
+        body = h.body()
+        if len(body) < check.min_chars:
+            return CheckResult(
+                check,
+                False,
+                f"fragment in {h.source!r}: {len(body)} chars after stripping "
+                f"breadcrumb (min {check.min_chars}) — {body[:40]!r}",
+            )
+    return CheckResult(check, True, f"all {len(window)} bodies ≥ {check.min_chars} chars")
+
+
+def _memory_id(check: Check, hits: list[RetrievedItem]) -> CheckResult:
+    """A specific memory must surface, optionally within `max_rank`.
+
+    This is the curated-beats-bulk assertion. klams#628's failure was
+    *not* that the hand-written gotcha was missing from the store — it
+    was that the gotcha lost its slot to bulk-scanned chunks. Asserting
+    on presence alone would have passed while the bug was live, so
+    `max_rank` is what gives the check teeth. Matching is by prefix, so a
+    suite can name `019f95dc-df08` without the full UUID.
+    """
+    if check.value is None:
+        return _missing_value(check)
+    wanted = check.value.lower()
+    for rank, h in enumerate(hits):
+        if h.memory_id.lower().startswith(wanted):
+            if check.max_rank is not None and rank > check.max_rank:
+                return CheckResult(
+                    check,
+                    False,
+                    f"{check.value} surfaced at rank {rank}, above the "
+                    f"max_rank {check.max_rank} — it is being outranked",
+                )
+            return CheckResult(check, True, f"{check.value} at rank {rank}")
+    return CheckResult(check, False, f"{check.value} absent from {len(hits)} result(s)")

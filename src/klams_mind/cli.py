@@ -178,7 +178,15 @@ def eval_run(
     ] = None,
     debug: Annotated[bool, typer.Option(help="Re-raise failures with full tracebacks.")] = False,
 ) -> None:
-    """Run a retrieval suite; exit 0 if every check passes, 1 if any fails."""
+    """Run a retrieval suite; exit 0 if there are no regressions, 1 otherwise.
+
+    klams sprint 026 (#643): the gate keys on *regressions*, not raw
+    failures. Queries marked `expect = "known_open"` are failing by
+    design against tracked work (klams#628's curated-beats-bulk pair, the
+    fence-chunker junk ceiling), so counting them would leave the suite
+    permanently red and useless as a gate. A `known_open` query that
+    starts passing is reported prominently but does not fail the run.
+    """
     cfg = load_config(path=config)
     try:
         suite = load_suite(suite_path)
@@ -199,7 +207,7 @@ def eval_run(
         out.write_text(markdown)
         typer.echo(f"wrote {out}", err=True)
     typer.echo(to_json(report) if json_output else markdown)
-    raise typer.Exit(0 if report.failed == 0 else 1)
+    raise typer.Exit(0 if report.regressions == 0 else 1)
 
 
 async def run_extract(

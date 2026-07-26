@@ -1,6 +1,7 @@
 """Runner aggregation + the klams retrieval adapter."""
 
 import json
+from typing import Literal
 
 from mcp.types import CallToolResult, TextContent
 
@@ -129,3 +130,54 @@ async def test_run_suite_carries_hits_into_result() -> None:
     hits = [RetrievedItem(content="x", source="s", kind="knowledge", score=0.5, source_rank=0)]
     results = await run_suite(suite_with(Check(type="substring", value="x")), FakeRetriever(hits))
     assert results[0].hits == hits
+
+
+# --- klams sprint 026 (#643): expect / known_open gating -------------------
+#
+# Without this, a measurement suite can only contain queries that already
+# pass — which is exactly how the original four scored 4/4 while klams#628
+# was live. `known_open` lets a real failure stay IN the suite, tracked,
+# without leaving the gate permanently red.
+
+
+def _suite(
+    expect: Literal["pass", "known_open"], check: Check, tracking: str | None = None
+) -> Suite:
+    return Suite(
+        name="t",
+        queries=[EvalQuery(query="q", top_k=4, checks=[check], expect=expect, tracking=tracking)],
+    )
+
+
+async def test_a_failing_known_open_query_is_not_a_regression() -> None:
+    retr = FakeRetriever([RetrievedItem(content="unrelated", source="x")])
+    results = await run_suite(
+        _suite("known_open", Check(type="substring", value="absent"), "klams#628"),
+        retr,
+    )
+    r = results[0]
+    assert not r.passed
+    assert not r.is_regression
+    assert r.tracking == "klams#628"
+
+
+async def test_a_failing_expected_pass_query_is_a_regression() -> None:
+    retr = FakeRetriever([RetrievedItem(content="unrelated", source="x")])
+    results = await run_suite(_suite("pass", Check(type="substring", value="absent")), retr)
+    assert results[0].is_regression
+
+
+async def test_a_passing_known_open_query_is_flagged_newly_fixed() -> None:
+    # The fix landed. This must be visible, or the query stays marked
+    # open forever and the next regression in it goes unnoticed.
+    retr = FakeRetriever([RetrievedItem(content="present", source="x")])
+    results = await run_suite(_suite("known_open", Check(type="substring", value="present")), retr)
+    r = results[0]
+    assert r.passed
+    assert r.is_newly_fixed
+    assert not r.is_regression
+
+
+async def test_queries_default_to_expect_pass() -> None:
+    # A suite author who writes nothing gets the strict bar.
+    assert EvalQuery(query="q").expect == "pass"

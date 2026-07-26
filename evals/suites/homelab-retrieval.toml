@@ -1,12 +1,34 @@
 name = "homelab-retrieval"
 description = """
-Baseline retrieval suite over questions klams demonstrably contains
-(machines, services, config, sprint history). This is the regression bar
-for klams retrieval changes — every check here should pass; a failure
-means retrieval regressed. Checks are retrieval-only (no LLM): `substring`
-= content recall, `source_cited` = source recall, `no_hallucination` =
-precision (a forbidden fragment must be absent from results).
+The regression bar for klams retrieval.
+
+Rewritten in klams sprint 026 (WI #643). The previous version had four
+queries and scored 4/4 — while every failure described in klams#628 was
+happening live. All four were satisfied by bulk scanner chunks, so the
+suite measured "does ANN return something topical" and nothing else.
+
+What it measures now:
+
+  1. curated-beats-bulk  — hand-written gotchas must beat scanner chunks
+                           on the phrasing an agent would actually type
+  2. no_duplicates       — klams#641's invariant (44% of the corpus is
+                           duplicate content; a page was 5 dup pairs)
+  3. min_body_chars      — the junk ceiling: content-free fence fragments
+                           score up to 0.956 and outrank real answers
+  4. memory_id/max_rank  — presence is not enough; #628's complaint was
+                           that the right memory EXISTED and lost
+  5. identifier-heavy    — feeds the lexical-retrieval decision (#333)
+
+Queries carry `expect`. `pass` is the regression bar. `known_open` means
+"currently broken, tracked, not a regression" — the honest way to keep a
+failure in the suite without leaving it permanently red. Every query here
+was verified against the live corpus on 2026-07-25, not invented.
 """
+
+# ---------------------------------------------------------------------
+# 1. Baseline: things klams demonstrably contains. Carried over from the
+#    original suite — still the floor, just no longer the whole bar.
+# ---------------------------------------------------------------------
 
 [[queries]]
 query = "what container image does the klams service use"
@@ -60,3 +82,236 @@ value = "001-bootstrap-first-light/sprint.md"
 [[queries.checks]]
 type = "substring"
 value = "bootstrap"
+
+# ---------------------------------------------------------------------
+# 2. klams#628 verbatim — the pair that started all of this.
+#
+#    Query B (literal, nearly quoting the memory) works today: the
+#    gotcha ranks 0 at raw 0.785. Query A (the natural phrasing, the one
+#    that actually matters) does not surface it at all — it loses to
+#    multae-viae spec chunks from a DEPRECATED repo. Both go in verbatim;
+#    A is the one the ranking sprint has to fix.
+# ---------------------------------------------------------------------
+
+[[queries]]
+query = "klams korg tools not available ToolSearch deferred lazily loaded"
+top_k = 5
+
+[[queries.checks]]
+# #628 Query B: the target gotcha must be the top hit.
+type = "memory_id"
+value = "019f95dc-df08"
+max_rank = 0
+
+[[queries]]
+query = "deferred MCP tools misdiagnosis"
+top_k = 10
+expect = "known_open"
+tracking = "klams#628 / #644 — provenance-weighted fusion, sprint 029"
+
+[[queries.checks]]
+# #628 Query A: same memory, natural phrasing. It does not appear at all
+# today; the slots go to bulk-scanned spec prose about MCP. This is THE
+# curated-beats-bulk case.
+type = "memory_id"
+value = "019f95dc-df08"
+max_rank = 2
+
+# ---------------------------------------------------------------------
+# 3. More curated-beats-bulk, in symptom phrasing — what an agent types
+#    when it has the problem, not what the memory says about itself.
+#    Each target is a real hand-authored memory (author `claude`).
+# ---------------------------------------------------------------------
+
+[[queries]]
+# Target: 019f9ae4-79c0 — the memory_add size-ceiling gotcha.
+# Symptom phrasing: what you'd type after a write mysteriously failed.
+query = "memory_add failed EMBEDDING_UNAVAILABLE should I retry"
+top_k = 10
+expect = "known_open"
+tracking = "klams#644 — curated content loses to bulk spec/test chunks"
+
+[[queries.checks]]
+type = "memory_id"
+value = "019f9ae4-79c0"
+max_rank = 2
+
+[[queries]]
+# Same memory, phrasing closer to its own wording. Confirms the memory is
+# retrievable at all — so a failure above is ranking, not absence.
+query = "klams memory_add size ceiling bge-small 512 tokens split the text"
+top_k = 10
+
+[[queries.checks]]
+type = "memory_id"
+value = "019f9ae4-79c0"
+max_rank = 4
+
+[[queries]]
+# Target: 019f9a36-e558 — deferred vs genuinely disconnected MCP.
+query = "mcp tools missing from my tool list is the server down"
+top_k = 10
+expect = "known_open"
+tracking = "klams#644 — symptom phrasing loses to bulk chunks"
+
+[[queries.checks]]
+type = "memory_id"
+value = "019f9a36-e558"
+max_rank = 2
+
+[[queries]]
+# Target: 019f9a83-68bc — the rpidash3 machine record.
+# This one DOES work: a machine-name query is distinctive enough.
+query = "rpidash3 raspberry pi machine specs"
+top_k = 5
+
+[[queries.checks]]
+type = "memory_id"
+value = "019f9a83-68bc"
+max_rank = 0
+
+# ---------------------------------------------------------------------
+# 4. The rpidash3 re-merge regression (korg:635).
+#
+#    The record was split into three because of the memory_add size
+#    ceiling. Its later paragraphs (ACCESS, NETWORK) are therefore in a
+#    different point than its opening — and querying THEIR terms finds
+#    neither: the top hit is an unrelated obsidian note about Rust
+#    videos. Gates the chunking work (#632) and the model upgrade (#655)
+#    that removes the ceiling forcing the split.
+# ---------------------------------------------------------------------
+
+[[queries]]
+query = "rpidash3 tailscale ed25519 passwordless sudo cloud-init groups"
+top_k = 10
+expect = "known_open"
+tracking = "korg:635 / klams#632 — split record, last-paragraph terms unretrievable"
+
+[[queries.checks]]
+type = "memory_id"
+value = "019f9a83"
+max_rank = 4
+
+[[queries.checks]]
+# The failure is loud: an obsidian Rust-course note wins a homelab
+# machine query outright.
+type = "no_hallucination"
+value = "Duke Courses"
+
+# ---------------------------------------------------------------------
+# 5. The dedupe invariant (klams#641).
+#
+#    Verified live on 2026-07-25 against klams v0.1.25 (pre-fix): this
+#    query returned the same kpidash doc from kai AND kubs0 at ranks 1-2,
+#    and the same README from both hosts at ranks 3-4. Two duplicate
+#    pairs in a six-result page. These must pass once 026 deploys.
+# ---------------------------------------------------------------------
+
+[[queries]]
+query = "rpidash3 dashboard raspberry pi"
+top_k = 10
+
+[[queries.checks]]
+type = "no_duplicates"
+
+[[queries]]
+query = "kpidash dashboard build commands"
+top_k = 10
+
+[[queries.checks]]
+type = "no_duplicates"
+
+[[queries]]
+query = "kpidash cross compilation aarch64 toolchain"
+top_k = 10
+
+[[queries.checks]]
+type = "no_duplicates"
+
+# ---------------------------------------------------------------------
+# 6. The junk ceiling (klams F-2.3).
+#
+#    `kpidash Development Guidelines > Commands > Dashboard build` +
+#    "```bash" is a real, live chunk (019f509b-2f45). Breadcrumb
+#    stripped, its body is seven characters — and it ranks, because it is
+#    almost exactly the query's words and nothing else. The chunker is
+#    fence-unaware: a `# comment` inside a bash block parses as a heading
+#    and closes the section right after the opening fence.
+# ---------------------------------------------------------------------
+
+[[queries]]
+query = "kpidash dashboard build commands"
+top_k = 5
+expect = "known_open"
+tracking = "klams F-2.3 — fence-unaware chunker, not yet scheduled"
+
+[[queries.checks]]
+type = "min_body_chars"
+min_chars = 40
+top_n = 5
+
+[[queries]]
+query = "klams gate fmt clippy test"
+top_k = 5
+expect = "known_open"
+tracking = "klams F-2.3 — fence-unaware chunker, not yet scheduled"
+
+[[queries.checks]]
+type = "min_body_chars"
+min_chars = 40
+top_n = 5
+
+# ---------------------------------------------------------------------
+# 7. Identifier-heavy set — feeds the lexical-retrieval decision (#333).
+#
+#    Knowledge is ANN-only; there is no lexical signal for knowledge at
+#    all. These are exact tokens with known homes. If they land, pure
+#    vector retrieval is adequate for identifiers and #333 can be
+#    declined; if they don't, that is the evidence for adding BM25.
+#    Recorded as measurements, not as a pass/fail bar — which way they
+#    fall IS the decision input.
+# ---------------------------------------------------------------------
+
+[[queries]]
+query = "EMBEDDING_UNAVAILABLE"
+top_k = 10
+
+[[queries.checks]]
+type = "substring"
+value = "EMBEDDING_UNAVAILABLE"
+
+[[queries]]
+query = "LOW_SCORE_THRESHOLD"
+top_k = 10
+expect = "known_open"
+tracking = "klams#333 — no lexical signal for knowledge; exact identifiers miss"
+
+[[queries.checks]]
+type = "substring"
+value = "LOW_SCORE_THRESHOLD"
+
+[[queries]]
+query = "encke-wahoo.ts.net tailnet hostname"
+top_k = 10
+
+[[queries.checks]]
+type = "substring"
+value = "encke-wahoo"
+
+[[queries]]
+query = "find_knowledge_by_content_hash"
+top_k = 10
+expect = "known_open"
+tracking = "klams#333 — exact function-name lookup has no lexical path"
+
+[[queries.checks]]
+type = "substring"
+value = "find_knowledge_by_content_hash"
+
+[[queries]]
+query = "klams listen_addr config key"
+top_k = 10
+
+[[queries.checks]]
+type = "substring"
+value = "listen_addr"
