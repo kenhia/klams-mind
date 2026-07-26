@@ -118,8 +118,11 @@ top_k = 5
 # for symptom-phrasing wins (Query A "deferred MCP tools misdiagnosis"
 # now PASSES for the first time). The gotcha is retrieved at rank 1-2,
 # outranked by bulk chunks — the provenance-weighting case, verbatim.
-expect = "known_open"
-tracking = "sprint 030 reranker (korg:686) — post-029 the gotcha sits at rank 1 behind its SIBLING curated gotcha (019f9a36-e558, same topic); curated-beats-bulk now holds, intra-curated ordering is the reranker's job (or consolidate the two gotchas via memory_supersede and retarget)"
+expect = "pass"
+# Promoted klams sprint 030 (korg:686): the second-stage cross-encoder
+# (bge-reranker-v2-m3) separates the gotcha from its sibling curated
+# gotcha (019f9a36-e558) — rank 0 with the rerank stage on. History:
+# known_open through 028 (bulk outranked it) and 029 (sibling shadow).
 
 [[queries.checks]]
 # #628 Query B: the target gotcha must be the top hit.
@@ -198,8 +201,11 @@ max_rank = 2
 # not absence — the 029 weighting case.
 query = "rpidash3 raspberry pi machine specs"
 top_k = 5
-expect = "known_open"
-tracking = "sprint 030 reranker (korg:686) — post-029 the specs record sits at rank 1 behind the hand-authored 'rpidash3 joined the fleet' memory (019f9c03-8d25); same tier, ranking cannot separate them"
+expect = "pass"
+# Promoted klams sprint 030 (korg:686): the cross-encoder ranks the
+# specs record above the 'joined the fleet' note (019f9c03-8d25) —
+# rank 0 with the rerank stage on. Same-tier inversion, closed by
+# semantics rather than provenance.
 
 [[queries.checks]]
 type = "memory_id"
