@@ -119,7 +119,7 @@ top_k = 5
 # now PASSES for the first time). The gotcha is retrieved at rank 1-2,
 # outranked by bulk chunks — the provenance-weighting case, verbatim.
 expect = "known_open"
-tracking = "klams#644 / sprint 029 — rank-inversion: curated gotcha at rank 1-2 behind bulk"
+tracking = "sprint 030 reranker (korg:686) — post-029 the gotcha sits at rank 1 behind its SIBLING curated gotcha (019f9a36-e558, same topic); curated-beats-bulk now holds, intra-curated ordering is the reranker's job (or consolidate the two gotchas via memory_supersede and retarget)"
 
 [[queries.checks]]
 # #628 Query B: the target gotcha must be the top hit.
@@ -199,7 +199,7 @@ max_rank = 2
 query = "rpidash3 raspberry pi machine specs"
 top_k = 5
 expect = "known_open"
-tracking = "klams#644 / sprint 029 — target at rank 1"
+tracking = "sprint 030 reranker (korg:686) — post-029 the specs record sits at rank 1 behind the hand-authored 'rpidash3 joined the fleet' memory (019f9c03-8d25); same tier, ranking cannot separate them"
 
 [[queries.checks]]
 type = "memory_id"
@@ -218,10 +218,14 @@ max_rank = 0
 # ---------------------------------------------------------------------
 
 [[queries]]
+# Promoted to `pass` on 2026-07-26 (klams sprint 029): fixed by the
+# curated-stratum fusion source — the split record's parts are agent
+# memories, and the stratum surfaces them (raw 0.64 vs a 0.57 global
+# top) even though no global top-k ever contained them. The record is
+# still split (korg:635 / klams#632); consolidation via the new
+# memory_supersede is the remaining data action.
 query = "rpidash3 tailscale ed25519 passwordless sudo cloud-init groups"
 top_k = 10
-expect = "known_open"
-tracking = "korg:635 / klams#632 — split record, last-paragraph terms unretrievable"
 
 [[queries.checks]]
 type = "memory_id"
@@ -276,10 +280,13 @@ type = "no_duplicates"
 # ---------------------------------------------------------------------
 
 [[queries]]
+# Promoted to `pass` on 2026-07-26 (klams sprint 029 session): the 028
+# baseline run reported it newly fixed — the fence-aware chunker (#639,
+# shipped in 028 despite this comment's "not yet scheduled") plus the
+# corpus rebuild removed the 7-character '```bash' fragments from this
+# page. Junk reappearing here is a genuine regression.
 query = "kpidash dashboard build commands"
 top_k = 5
-expect = "known_open"
-tracking = "klams F-2.3 — fence-unaware chunker, not yet scheduled"
 
 [[queries.checks]]
 type = "min_body_chars"
