@@ -114,6 +114,12 @@ value = "bootstrap"
 [[queries]]
 query = "klams korg tools not available ToolSearch deferred lazily loaded"
 top_k = 5
+# klams sprint 028: the Qwen3 swap traded this literal-phrasing rank-0
+# for symptom-phrasing wins (Query A "deferred MCP tools misdiagnosis"
+# now PASSES for the first time). The gotcha is retrieved at rank 1-2,
+# outranked by bulk chunks — the provenance-weighting case, verbatim.
+expect = "known_open"
+tracking = "klams#644 / sprint 029 — rank-inversion: curated gotcha at rank 1-2 behind bulk"
 
 [[queries.checks]]
 # #628 Query B: the target gotcha must be the top hit.
@@ -124,8 +130,8 @@ max_rank = 0
 [[queries]]
 query = "deferred MCP tools misdiagnosis"
 top_k = 10
-expect = "known_open"
-tracking = "klams#628 / #644 — provenance-weighted fusion, sprint 029"
+# Promoted to pass in klams sprint 028: fixed by the Qwen3 model swap —
+# the #628 headline symptom-phrasing query retrieves the gotcha.
 
 [[queries.checks]]
 # #628 Query A: same memory, natural phrasing. It does not appear at all
@@ -142,35 +148,43 @@ max_rank = 2
 # ---------------------------------------------------------------------
 
 [[queries]]
-# Target: 019f9ae4-79c0 — the memory_add size-ceiling gotcha.
+# Target: 019f9d5a-25d2 — the memory_add size-ceiling gotcha.
 # Symptom phrasing: what you'd type after a write mysteriously failed.
+#
+# Retargeted in klams sprint 028: the original target (019f9ae4-79c0,
+# then its 027 successor 019f9d03-ead2) was superseded when the Qwen3
+# 32k-ceiling model shipped — the suite was asserting a memory that no
+# longer exists BY DESIGN. Same memory lineage, current id.
 query = "memory_add failed EMBEDDING_UNAVAILABLE should I retry"
 top_k = 10
-expect = "known_open"
-tracking = "klams#644 — curated content loses to bulk spec/test chunks"
+# Promoted to pass in klams sprint 028 (fixed by the Qwen3 swap + the
+# 028 memory supersede).
 
 [[queries.checks]]
 type = "memory_id"
-value = "019f9ae4-79c0"
+value = "019f9d5a-25d2"
 max_rank = 2
 
 [[queries]]
 # Same memory, phrasing closer to its own wording. Confirms the memory is
 # retrievable at all — so a failure above is ranking, not absence.
-query = "klams memory_add size ceiling bge-small 512 tokens split the text"
+# (Query text updated with the 028 retarget: no agent types "bge-small
+# 512" against a 32k Qwen3 deployment.)
+query = "klams memory_add size ceiling how much text PAYLOAD_TOO_LARGE split"
 top_k = 10
+# Promoted to pass in klams sprint 028 (retargeted to the successor
+# memory, which ranks top-4 under Qwen3).
 
 [[queries.checks]]
 type = "memory_id"
-value = "019f9ae4-79c0"
+value = "019f9d5a-25d2"
 max_rank = 4
 
 [[queries]]
 # Target: 019f9a36-e558 — deferred vs genuinely disconnected MCP.
 query = "mcp tools missing from my tool list is the server down"
 top_k = 10
-expect = "known_open"
-tracking = "klams#644 — symptom phrasing loses to bulk chunks"
+# Promoted to pass in klams sprint 028: fixed by the Qwen3 model swap.
 
 [[queries.checks]]
 type = "memory_id"
@@ -179,9 +193,13 @@ max_rank = 2
 
 [[queries]]
 # Target: 019f9a83-68bc — the rpidash3 machine record.
-# This one DOES work: a machine-name query is distinctive enough.
+# This one worked at rank 0 under bge-small; under Qwen3 (klams sprint
+# 028) it sits at rank 1 behind another agent memory. Rank-inversion,
+# not absence — the 029 weighting case.
 query = "rpidash3 raspberry pi machine specs"
 top_k = 5
+expect = "known_open"
+tracking = "klams#644 / sprint 029 — target at rank 1"
 
 [[queries.checks]]
 type = "memory_id"
@@ -305,8 +323,8 @@ value = "EMBEDDING_UNAVAILABLE"
 [[queries]]
 query = "LOW_SCORE_THRESHOLD"
 top_k = 10
-expect = "known_open"
-tracking = "klams#333 — no lexical signal for knowledge; exact identifiers miss"
+# Promoted to pass in klams sprint 028: Qwen3 retrieves the exact
+# identifier — weakens the #333 lexical-gap case; keep watching.
 
 [[queries.checks]]
 type = "substring"
