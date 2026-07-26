@@ -2,9 +2,11 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-07-09 (001–006 shipped; 007 consolidation is next.
-Queue was renumbered 005+ after the unplanned 003 client-lib and 004
-scored-retrieval sprints consumed the numbers it had penciled in.)  
+**Date:** 2026-07-26 (001–006 shipped; 007 eval provenance is in
+flight; consolidation slid to 008. Queue was renumbered 005+ after the
+unplanned 003 client-lib and 004 scored-retrieval sprints consumed the
+numbers it had penciled in, and again at 007 when klams#676 was pulled
+forward off proposal korg:654 to land before klams sprint 028.)  
 **Related:** klams repo `sprints/planning/roadmap.md` (the two queues
 cross-reference each other) · decision record: klams repo
 `sprints/planning/wi259-recommendation.md` · salvage inventory (krag
@@ -36,7 +38,19 @@ that queue.
 
 ## Sprint queue
 
-### 007 — Consolidation (next)
+### 007 — Eval provenance (in flight)
+
+klams#676, pulled out of proposal korg:654. Stamp every report and
+baseline with run date, the klams version it ran against, and the suite
+file + content hash; flag a klams-version difference against the
+baseline in one line. Small, and it lands before klams 028 so that
+sprint's "capture the baseline before the corpus wipe, compare after"
+story is falsifiable. See
+[007-eval-provenance/sprint.md](../007-eval-provenance/sprint.md) —
+including the test-set leakage it uncovered (klams#677: the eval suite
+had been scanned into the corpus it queries).
+
+### 008 — Consolidation (next)
 
 Decay-informed maintenance passes: merge near-duplicates, summarize
 stale clusters, propose prunes. Propose-first like extraction; uses
@@ -47,7 +61,7 @@ sprints teach us what the corpus needs.
 **What 006 learned:** the live corpus on kubs0 is *entirely*
 `knowledge` — zero `fact`/`event` memories (extraction writes
 knowledge; facts arrive via klams's Ansible/structured paths). Two
-consequences for 007: (1) consolidation should target knowledge
+consequences for 008: (1) consolidation should target knowledge
 near-duplicates, since that is what actually exists; (2) contradiction
 detection has nothing live to run on until facts start landing — worth
 raising with klams whether extraction should also emit facts, or
