@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass
 
 from klams_mind.eval.checks import RetrievedItem
+from klams_mind.eval.provenance import Provenance
 from klams_mind.eval.runner import EvalQueryResult
 
 
@@ -27,9 +28,20 @@ class Report:
     regressions: int = 0
     known_open: int = 0
     newly_fixed: int = 0
+    # klams#676. `provenance` is what this run was; `baseline` is what the
+    # artifact we are comparing against was. A difference between them is
+    # reported, never failed on — see `_drift_lines`.
+    provenance: Provenance | None = None
+    baseline: Provenance | None = None
 
 
-def build_report(suite: str, results: list[EvalQueryResult]) -> Report:
+def build_report(
+    suite: str,
+    results: list[EvalQueryResult],
+    *,
+    provenance: Provenance | None = None,
+    baseline: Provenance | None = None,
+) -> Report:
     total = len(results)
     passed = sum(1 for r in results if r.passed)
     by_type: dict[str, tuple[int, int]] = {}
@@ -48,13 +60,28 @@ def build_report(suite: str, results: list[EvalQueryResult]) -> Report:
         regressions=sum(1 for r in results if r.is_regression),
         known_open=sum(1 for r in results if r.expect == "known_open" and not r.passed),
         newly_fixed=sum(1 for r in results if r.is_newly_fixed),
+        provenance=provenance,
+        baseline=baseline,
     )
+
+
+def _prov_json(prov: Provenance | None) -> dict[str, str | None] | None:
+    if prov is None:
+        return None
+    return {
+        "run_at": prov.run_at,
+        "suite_file": prov.suite_file,
+        "suite_hash": prov.suite_hash,
+        "klams_version": prov.klams_version,
+    }
 
 
 def to_json(report: Report) -> str:
     return json.dumps(
         {
             "suite": report.suite,
+            "provenance": _prov_json(report.provenance),
+            "baseline": _prov_json(report.baseline),
             "total": report.total,
             "passed": report.passed,
             "failed": report.failed,
@@ -97,16 +124,47 @@ def to_json(report: Report) -> str:
     )
 
 
+def _drift_lines(report: Report) -> list[str]:
+    """Provenance differences between this run and the baseline it is compared against.
+
+    Informational only: a run is failed by regressions, never by the
+    baseline being old. One of these lines would have ended sprint 026's
+    false-regression detour on sight instead of after a forensic dig
+    through score magnitudes.
+    """
+    prov, base = report.provenance, report.baseline
+    if prov is None or base is None:
+        return []
+    notes = []
+    if base.klams_version and prov.klams_version and base.klams_version != prov.klams_version:
+        notes.append(
+            f"Baseline captured against klams {base.klams_version}; "
+            f"running against {prov.klams_version}."
+        )
+    if base.suite_hash != prov.suite_hash:
+        notes.append(
+            f"The suite has changed since the baseline "
+            f"(`{base.suite_hash}` → `{prov.suite_hash}`) — counts are not comparable."
+        )
+    if not notes:
+        return []
+    return ["", f"> **Baseline:** {base.run_at}.", *[f"> {n}" for n in notes]]
+
+
 def to_markdown(report: Report) -> str:
     pct = f"{report.pass_rate:.0%}"
     verdict = "REGRESSION" if report.regressions else "OK"
-    lines = [
-        f"# Retrieval eval — {report.suite}",
-        "",
+    lines = [f"# Retrieval eval — {report.suite}", ""]
+    if report.provenance is not None:
+        lines += [*report.provenance.markdown_lines(), ""]
+    lines += [
         f"**{verdict} — {report.passed}/{report.total} queries passed ({pct}).**",
         "",
         f"{report.regressions} regression(s), {report.known_open} known-open, "
         f"{report.newly_fixed} newly fixed.",
+    ]
+    lines += _drift_lines(report)
+    lines += [
         "",
         "## Checks by type",
         "",

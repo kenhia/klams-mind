@@ -52,8 +52,9 @@ endpoint. Exit 0 means all four legs work.
 
 ```sh
 uv run klams-mind eval run evals/suites/homelab-retrieval.toml
-uv run klams-mind eval run <suite> --json           # machine-readable
-uv run klams-mind eval run <suite> --out report.md  # also write markdown
+uv run klams-mind eval run <suite> --json               # machine-readable
+uv run klams-mind eval run <suite> --out report.md      # also write markdown
+uv run klams-mind eval run <suite> --baseline old.md    # compare provenance, don't overwrite
 ```
 
 A suite is a TOML file of queries, each with retrieval checks run against
@@ -69,6 +70,30 @@ its relevance score, kind, and pre-fusion source rank (klams ≥ 016 scored
 envelopes; scores are only comparable within a kind). Suites live in
 [evals/suites/](evals/suites/); a committed baseline report is in
 [evals/baselines/](evals/baselines/) as the retrieval regression bar.
+
+Every report — markdown and JSON — is stamped with **when** it ran, the
+**klams version** it ran against, and the **suite file + content hash**,
+so a baseline can never again be five sprints stale without saying so.
+If the baseline it's compared against records a different klams version,
+the report says so in one line; that is informational and never fails a
+run. `--baseline` names the artifact to compare against explicitly;
+otherwise an existing `--out` file is used (read before it's overwritten,
+so refreshing a baseline still tells you what you're replacing). The
+refreshed artifact never carries the drift note — it describes the run,
+not the file.
+
+Refreshing the baseline stays a deliberate act. Regenerate with:
+
+```sh
+uv run klams-mind eval run evals/suites/homelab-retrieval.toml \
+  --out evals/baselines/homelab-retrieval.md
+```
+
+> The repo-root [.klamsignore](.klamsignore) keeps `evals/` out of the
+> klams corpus. Without it the suite is indexed into the very corpus it
+> queries, wins its own queries on lexical overlap, and each refreshed
+> baseline contaminates the next run. See
+> [sprints/007-eval-provenance/](sprints/007-eval-provenance/).
 
 ### Memory extraction
 
