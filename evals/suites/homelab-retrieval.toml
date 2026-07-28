@@ -23,6 +23,13 @@ Queries carry `expect`. `pass` is the regression bar. `known_open` means
 "currently broken, tracked, not a regression" — the honest way to keep a
 failure in the suite without leaving it permanently red. Every query here
 was verified against the live corpus on 2026-07-25, not invented.
+
+Grown in klams sprint 033 (#692): the suite had read 21/21 since 030 —
+an instrument that can't fail measures nothing — so it gained what the
+025–030 arc built but never guarded: supersession-under-paraphrase
+(sections 8), the provenance machine-gate repair (9), and the first
+harvest of real post-028 agent queries plus the standing hygiene search
+as a known_open (10). All verified live 2026-07-28.
 """
 
 # ---------------------------------------------------------------------
@@ -379,3 +386,117 @@ top_k = 10
 [[queries.checks]]
 type = "substring"
 value = "listen_addr"
+
+# ---------------------------------------------------------------------
+# 8. Lifecycle adversarial cases (added klams sprint 033, #692).
+#
+#    029 shipped supersede/update/volatility and 030 the reranker; the
+#    suite had no case that could fail if that machinery broke. These
+#    exercise it against real lifecycle chains in the live corpus.
+# ---------------------------------------------------------------------
+
+[[queries]]
+# Supersession must hold under PARAPHRASE, not just the original
+# wording: the 0.1.28 → 0.1.29 → 0.1.30 search-behavior memory chain
+# is real (each note superseded its predecessor via memory_supersede).
+# The current note must win; the superseded 0.1.29 note must stay
+# hidden — a superseded record resurfacing at any rank is the exact
+# failure supersession exists to prevent (review F-1.1: "a superseded
+# memory surfacing at rank 7 still gets believed").
+query = "klams memory_search score field behavior ranking"
+top_k = 8
+
+[[queries.checks]]
+type = "memory_id"
+value = "019fa04a-ceac"
+max_rank = 0
+
+[[queries.checks]]
+# The superseded note's own phrasing; only it contains this string.
+type = "no_hallucination"
+value = "as of 0.1.29"
+
+# ---------------------------------------------------------------------
+# 9. Provenance-integrity repair bar (added klams sprint 033, #692).
+#
+#    The curated classifier's machine-gate (029) was added to keep
+#    scanned transcript chunks out of the curated stratum. #688 (032)
+#    re-sourced those chunks to Task — after which the gate's ONLY
+#    remaining effect was collateral: 10 genuine May–July agent writes
+#    carrying a legacy `machine` stamp were silently down-tiered to
+#    Bulk. Sprint 033 repaired the 10 points (cleared `machine`;
+#    before-state in klams sprints/033-retrospective/). Measured
+#    pre-repair: the axum gotcha LOST rank 0 to a lower-raw scanner
+#    chunk (0.708 vs 0.651). These two hold the repair: a regression
+#    here means machine-stamped agent writes are back, or the gate
+#    grew new collateral.
+# ---------------------------------------------------------------------
+
+[[queries]]
+query = "axum middleware layer nested router auth not applied"
+top_k = 5
+
+[[queries.checks]]
+type = "memory_id"
+value = "019e6043-5582"
+max_rank = 0
+
+[[queries]]
+query = "rmcp allowed_hosts 403 forbidden host header"
+top_k = 5
+
+[[queries.checks]]
+type = "memory_id"
+value = "019e6043-5585"
+max_rank = 0
+
+# ---------------------------------------------------------------------
+# 10. Mined from real post-028 traffic (added klams sprint 033, #692).
+#
+#     First harvest of the search_sample log the 026 review asked for.
+#     Caveat learned doing it: ~75% of the log is the eval suite's own
+#     runs (caller klams-mind), so mining it naively feeds the suite
+#     its own queries back — these came from the organic remainder
+#     (caller claude, 2026-07-27/28), verified live before adding.
+# ---------------------------------------------------------------------
+
+[[queries]]
+# An agent locating the agent-skills deploy story. The curated
+# consolidation note must beat the bulk chunks of the skills repo
+# itself.
+query = "agent-skills repo kubs0 kai claude hooks deploy install.sh"
+top_k = 5
+
+[[queries.checks]]
+type = "memory_id"
+value = "019fa694-6664"
+max_rank = 2
+
+[[queries]]
+# Session-title plumbing: the hand-authored note on where the
+# auto-generated title lives must beat the scanned transcripts that
+# merely mention it.
+query = "Claude Code session title aiTitle customTitle transcript auto-generated name"
+top_k = 5
+
+[[queries.checks]]
+type = "memory_id"
+value = "019fa100-bd42"
+max_rank = 1
+
+[[queries]]
+# The standing post-sprint hygiene search, verbatim (run after every
+# klams sprint). Today it returns bulk analysis chunks and klams-mind
+# extracts only — every curated gotcha scores under the 0.45 stratum
+# floor for this phrasing (measured 2026-07-28: best curated raw
+# 0.405–0.450 vs bulk top 0.495). Directional bar: the flagship MCP
+# gotcha should surface for the query operators actually type.
+# Tracked in klams WI #729 (vague-query recall).
+query = "klams gotcha"
+top_k = 5
+expect = "known_open"
+
+[[queries.checks]]
+type = "memory_id"
+value = "019f95dc-df08"
+max_rank = 4
