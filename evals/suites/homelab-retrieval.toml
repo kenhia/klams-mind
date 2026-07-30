@@ -486,15 +486,15 @@ max_rank = 1
 
 [[queries]]
 # The standing post-sprint hygiene search, verbatim (run after every
-# klams sprint). Today it returns bulk analysis chunks and klams-mind
-# extracts only — every curated gotcha scores under the 0.45 stratum
-# floor for this phrasing (measured 2026-07-28: best curated raw
-# 0.405–0.450 vs bulk top 0.495). Directional bar: the flagship MCP
-# gotcha should surface for the query operators actually type.
-# Tracked in klams WI #729 (vague-query recall).
+# klams sprint). Promoted to `pass` in klams sprint 037 (#729/#333):
+# the lexical candidate list (Qdrant full-text index, 5th RRF source)
+# surfaces the flagship gotcha for this phrasing — its cosine (raw
+# 0.405, under the 0.45 stratum floor; measured 2026-07-28) never
+# could, but "gotcha" is literally in the text, and the all-tokens
+# match now argues for it. History: known_open from 033 to 036.
 query = "klams gotcha"
 top_k = 5
-expect = "known_open"
+expect = "pass"
 
 [[queries.checks]]
 type = "memory_id"
