@@ -27,3 +27,7 @@ gate:
     uv run ruff check .
     uv run ty check
     uv run pytest
+
+# Prove the plumbing against live klams + kvllm (not part of the gate).
+smoke *ARGS:
+    uv run klams-mind smoke {{ ARGS }}

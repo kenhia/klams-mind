@@ -40,8 +40,9 @@ in the klams repo at `sprints/planning/wi259-recommendation.md`.
 ## Usage
 
 ```sh
-uv run klams-mind smoke          # prove the plumbing end to end
-uv run klams-mind smoke --json   # same, machine-readable
+just smoke                       # prove the plumbing end to end
+just smoke --json                # same, machine-readable
+uv run klams-mind smoke          # the same thing, without just
 ```
 
 `smoke` health-checks klams, registers the `klams-mind` author, runs
@@ -159,9 +160,10 @@ the client wraps them via the official `mcp` SDK.
 uv sync          # create/refresh the venv
 just --list      # discover recipes
 just gate        # fmt-check + lint + typecheck + tests (what CI runs)
+just smoke       # check the live klams + kvllm plumbing (not in the gate)
 
 # live tests (skipped otherwise) need the real service:
-KLAMS_URL=http://kubs0:7777 KLAMS_TOKEN=... uv run pytest -m live
+KLAMS_URL=http://localhost:7777 KLAMS_TOKEN=... uv run pytest -m live
 ```
 
 Workflow, principles, and the sprint convention are in
