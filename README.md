@@ -160,6 +160,7 @@ the client wraps them via the official `mcp` SDK.
 uv sync          # create/refresh the venv
 just --list      # discover recipes
 just gate        # fmt-check + lint + typecheck + tests (what CI runs)
+just check       # alias for `gate`, the name the kproject harness uses
 just smoke       # check the live klams + kvllm plumbing (not in the gate)
 
 # live tests (skipped otherwise) need the real service:
@@ -167,7 +168,10 @@ KLAMS_URL=http://localhost:7777 KLAMS_TOKEN=... uv run pytest -m live
 ```
 
 Workflow, principles, and the sprint convention are in
-[AGENTS.md](AGENTS.md).
+[AGENTS.md](AGENTS.md). The repo is on the
+[kproject harness](https://github.com/kenhia/kprojects), which manages a
+marked block in `CLAUDE.md` and `.github/copilot-instructions.md` —
+AGENTS.md stays the authority on repo specifics.
 
 ## License
 

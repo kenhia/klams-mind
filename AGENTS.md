@@ -18,6 +18,26 @@ retrieval evals. Two hard boundaries:
 Purpose-built for Ken's homelab (`kubs0`, `kai`); don't generalize
 paths, hostnames, or assumptions "for portability."
 
+## Harness
+
+This repo is on the [kproject minimal harness](https://github.com/kenhia/kprojects).
+`kproject-install` manages a marked block (`kproject:begin`/`kproject:end`)
+in `CLAUDE.md` and `.github/copilot-instructions.md`; **don't hand-edit
+inside those markers** — a re-run overwrites them.
+
+**This file is not managed by the installer, and it wins on repo
+specifics.** The block states the harness's general conventions; where
+it and this file differ, the difference is deliberate:
+
+- **`just check` is an alias for `just gate`.** The block tells agents
+  `just check` runs the gates, so that name has to exist. `gate` stays
+  the single definition CI invokes.
+- **Agent scratch goes in `.scratch-agent/`, not `.scratch/`.** The
+  block's one-directory shorthand predates this repo's split; keep the
+  split.
+- **Sprint records are directories** (`sprints/###-<stub>/`), which is
+  the block's directory variant. Don't switch to flat `###-<stub>.md`.
+
 ## Sprint workflow
 
 Work is organized into **sprints**, where a sprint is simply *the work
@@ -54,7 +74,8 @@ marked and skipped when the endpoint is absent.
 ### Code standards gate
 
 Every commit must pass the gate — `just gate` runs exactly what CI
-runs:
+runs (`just check` is an alias for it, for agents following the
+harness block):
 
 ```bash
 uv run ruff format --check .
@@ -94,7 +115,7 @@ endpoints, session-log parsing) — trust internal code.
 
 | Directory | Purpose | Tracked |
 |-----------|---------|---------|
-| `sprints/` | Sprint records (`###-<stub>/`) + `planning/` | Yes |
+| `sprints/` | Sprint records (`###-<stub>/`) + `planning/` + `review/` | Yes |
 | `src/klams_mind/` | Package source | Yes |
 | `tests/` | pytest suite | Yes |
 | `docs/` | Docs (when they exist) | Yes |
