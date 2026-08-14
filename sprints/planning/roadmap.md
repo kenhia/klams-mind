@@ -2,8 +2,9 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-07-26 (001–006 shipped; 007 eval provenance is in
-flight; consolidation slid to 008. Queue was renumbered 005+ after the
+**Date:** 2026-08-14 (001–007 shipped; 008 went to the kprojects
+harness chore, so consolidation slid to 009. Queue was renumbered 005+
+after the
 unplanned 003 client-lib and 004 scored-retrieval sprints consumed the
 numbers it had penciled in, and again at 007 when klams#676 was pulled
 forward off proposal korg:654 to land before klams sprint 028.)  
@@ -38,7 +39,7 @@ that queue.
 
 ## Sprint queue
 
-### 007 — Eval provenance (in flight)
+### 007 — Eval provenance (shipped)
 
 klams#676, pulled out of proposal korg:654. Stamp every report and
 baseline with run date, the klams version it ran against, and the suite
@@ -50,7 +51,16 @@ story is falsifiable. See
 including the test-set leakage it uncovered (klams#677: the eval suite
 had been scanned into the corpus it queries).
 
-### 008 — Consolidation (next)
+### 008 — kprojects harness (shipped, off-queue)
+
+Chore from proposal korg:1251 / work item #1248 — batch 3 of the
+kprojects rollout. Managed agent block in `CLAUDE.md` and
+`.github/copilot-instructions.md`, standard layout dirs, and the
+`just check` alias for `gate`. No behaviour change; it consumed the
+number the queue had penciled for consolidation. See
+[008-kprojects-harness/sprint.md](../008-kprojects-harness/sprint.md).
+
+### 009 — Consolidation (next)
 
 Decay-informed maintenance passes: merge near-duplicates, summarize
 stale clusters, propose prunes. Propose-first like extraction; uses
