@@ -5,10 +5,13 @@ for programmatic use; exit 0 on success, 1 on failure.
 import asyncio
 import json
 import logging
+import socket
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 import typer
+from pydantic import ValidationError
 
 from klams_mind import __version__
 from klams_mind.config import Config, load_config
@@ -19,7 +22,12 @@ from klams_mind.contradict.report import to_markdown as contradict_to_markdown
 from klams_mind.contradict.runner import DetectionResult, detect_contradictions
 from klams_mind.eval.provenance import Provenance, now_stamp, parse_provenance, suite_digest
 from klams_mind.eval.report import Report, build_report, to_json, to_markdown
-from klams_mind.eval.runner import KlamsRetriever, Retriever, run_suite
+from klams_mind.eval.runner import (
+    KlamsRetriever,
+    Retriever,
+    eval_klams_config,
+    run_suite,
+)
 from klams_mind.eval.suite import EvalLoadError, Suite, load_suite
 from klams_mind.extract.chain import build_extraction_chain
 from klams_mind.extract.report import to_json as extraction_to_json
@@ -41,10 +49,17 @@ contradict_app = typer.Typer(help="Find facts that contradict in meaning; propos
 app.add_typer(contradict_app, name="contradict")
 
 
+# The `agent_name` klams-mind registers and its main grant carries.
+_MAIN_AGENT_NAME = "klams-mind"
+
+
 class SmokeError(Exception):
     def __init__(self, step: str, cause: Exception) -> None:
         super().__init__(f"step '{step}' failed: {cause}")
         self.step = step
+        # #831: the diagnosis walks this, so keep it addressable rather
+        # than relying on `__cause__` surviving a re-raise.
+        self.exceptions = (cause,)
 
 
 async def run_smoke(
@@ -73,7 +88,7 @@ async def run_smoke(
 
             step = "register author"
             author = await client.register_author(
-                agent_name="klams-mind",
+                agent_name=_MAIN_AGENT_NAME,
                 model=model_name,
                 client_app="klams-mind",
                 client_version=__version__,
@@ -85,13 +100,14 @@ async def run_smoke(
 
             step = "memory search"
             query = "homelab machines and services"
-            hits = await client.memory_search(query, top_k=3)
+            # Deliberately the compact path (klams 046): the health check
+            # should exercise the shape agents actually receive.
+            found = await client.memory_search(query, top_k=3)
             report["search"] = {
                 "query": query,
-                "hits": len(hits),
-                "top": [
-                    {"kind": h.memory.kind, "id": str(h.memory.id), "score": h.score} for h in hits
-                ],
+                "hits": len(found.hits),
+                "truncated": found.more.truncated,
+                "top": [{"kind": h.kind, "id": str(h.id), "score": h.score} for h in found.hits],
             }
 
         step = "LLM call"
@@ -102,6 +118,68 @@ async def run_smoke(
 
     report["ok"] = True
     return report
+
+
+# --- smoke failure diagnosis (#831) -----------------------------------------
+
+# Steps whose failure is the model endpoint's fault, not klams'.
+_MODEL_STEPS = frozenset({"resolve model name", "LLM call"})
+
+
+def leaf_cause(exc: BaseException) -> BaseException:
+    """The innermost informative exception inside an `ExceptionGroup`.
+
+    The MCP streamable-http client nests two task groups, so a refused
+    connection arrives as `ExceptionGroup[ExceptionGroup[ConnectError]]`
+    and reads as "unhandled errors in a TaskGroup" — true, and useless.
+    """
+    while True:
+        subs = getattr(exc, "exceptions", None)
+        if not subs:
+            return exc
+        exc = subs[0]
+
+
+def _endpoint(step: str, cfg: Config) -> str:
+    return cfg.model.base_url if step in _MODEL_STEPS else cfg.klams.base_url
+
+
+def diagnose(step: str, exc: BaseException, cfg: Config, *, host: str | None = None) -> str:
+    """One actionable line for a smoke failure, chosen by the leaf cause.
+
+    `host` is this machine's short hostname (injected in tests); it only
+    affects the loopback tip below.
+    """
+    leaf = leaf_cause(exc)
+    url = _endpoint(step, cfg)
+
+    if isinstance(leaf, httpx.ConnectError | httpx.ConnectTimeout):
+        hint = f"unreachable at {url} ({leaf})"
+        # #831's own diagnosis cost: on kubs0 the default `kubs0`
+        # hostname resolves to 127.0.1.1, while klams binds 127.0.0.1
+        # and the tailnet address — so the service is up and the name
+        # is what is wrong.
+        parsed = httpx.URL(url)
+        if host is None:
+            host = socket.gethostname().split(".")[0]
+        if parsed.host == host and step not in _MODEL_STEPS:
+            hint += f"\nthis host is {host}: try KLAMS_URL=http://localhost:{parsed.port or 7777}"
+        return hint
+
+    if isinstance(leaf, httpx.HTTPStatusError):
+        code = leaf.response.status_code
+        if code in (401, 403):
+            return f"KLAMS_TOKEN rejected by klams at {url} (HTTP {code})"
+        return f"klams at {url} returned HTTP {code}"
+
+    if isinstance(leaf, ValidationError):
+        return (
+            f"{url} answered, but klams-mind could not parse the response "
+            f"— client/server contract drift; check this client against "
+            f"klams' version ({leaf.error_count()} validation error(s))"
+        )
+
+    return f"check klams ({cfg.klams.base_url}), kvllm ({cfg.model.base_url}), and KLAMS_TOKEN"
 
 
 def _print_human(report: dict[str, Any]) -> None:
@@ -139,11 +217,13 @@ def smoke(
     except SmokeError as failure:
         if debug:
             raise
-        typer.echo(f"smoke failed at {failure}", err=True)
+        # #831: report the leaf, not the TaskGroup wrapper it arrived in.
+        leaf = leaf_cause(failure.__cause__ or failure)
         typer.echo(
-            "check klams (kubs0:7777), kvllm (kai:8000), and KLAMS_TOKEN",
+            f"smoke failed at step '{failure.step}': {type(leaf).__name__}: {leaf}",
             err=True,
         )
+        typer.echo(diagnose(failure.step, failure, cfg), err=True)
         raise typer.Exit(1) from failure
     if json_output:
         typer.echo(json.dumps(report, indent=2))
@@ -173,8 +253,14 @@ async def run_eval(
     retriever_factory: Any = KlamsRetriever,
     now: Any = now_stamp,
 ) -> Report:
-    """Run a suite against live klams retrieval and aggregate a report."""
-    async with connect(cfg.klams) as client:
+    """Run a suite against live klams retrieval and aggregate a report.
+
+    #735: the run presents the eval-scoped grant when one is configured,
+    so its searches land in `search_sample` under their own `caller` and
+    mining can exclude them.
+    """
+    scoped, distinct = eval_klams_config(cfg.klams)
+    async with connect(scoped) as client:
         version = await _klams_version(client)
         retriever: Retriever = retriever_factory(client)
         results = await run_suite(suite, retriever)
@@ -183,6 +269,7 @@ async def run_eval(
         suite_file=suite_path.name,
         suite_hash=suite_digest(suite_path),
         klams_version=version,
+        caller=cfg.klams.eval_agent_name if distinct else _MAIN_AGENT_NAME,
     )
     return build_report(suite.name, results, provenance=provenance)
 
@@ -215,6 +302,15 @@ def eval_run(
     starts passing is reported prominently but does not fail the run.
     """
     cfg = load_config(path=config)
+    if not cfg.klams.eval_token:
+        # #735: not fatal, but it must not be silent — this is the state
+        # that made 75% of `search_sample` the suite's own queries.
+        typer.echo(
+            "eval: no KLAMS_EVAL_TOKEN — this run's searches will be logged as "
+            f"caller '{_MAIN_AGENT_NAME}', indistinguishable from real agent "
+            "queries in klams' search_sample (#735)",
+            err=True,
+        )
     try:
         suite = load_suite(suite_path)
     except EvalLoadError as exc:
@@ -272,7 +368,7 @@ async def run_extract(
         author_id: str | None = None
         if apply:
             author = await client.register_author(
-                agent_name="klams-mind",
+                agent_name=_MAIN_AGENT_NAME,
                 model=model_name,
                 client_app="klams-mind",
                 client_version=__version__,
@@ -351,13 +447,13 @@ async def run_contradict(
     model_name = await resolve_model_name(cfg.model)
     chain = chain_factory(build_chat(cfg.model.model_copy(update={"name": model_name})))
     async with connect(cfg.klams) as client:
-        hits = await client.memory_search(query, kinds=["fact"], top_k=top)
+        hits = await client.memory_search_full(query, kinds=["fact"], top_k=top)
         seeds = [h.memory for h in hits if isinstance(h.memory, FactMemory)]
         pairs = await find_candidate_pairs(client, seeds, neighbours=neighbours)
         author_id: str | None = None
         if apply:
             author = await client.register_author(
-                agent_name="klams-mind",
+                agent_name=_MAIN_AGENT_NAME,
                 model=model_name,
                 client_app="klams-mind",
                 client_version=__version__,

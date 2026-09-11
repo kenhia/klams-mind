@@ -20,7 +20,7 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import CallToolResult, TextContent
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from klams_mind.config import KlamsConfig
 
@@ -153,6 +153,66 @@ _memory = TypeAdapter[Memory](Memory)
 _scored_memories = TypeAdapter[list[ScoredMemory]](list[ScoredMemory])
 
 
+class More(BaseModel):
+    """klams' explicit "here is how you get the rest" pointer.
+
+    Present on every compact response, not only truncated ones — klams'
+    reasoning is that a field appearing only sometimes is a field nobody
+    learns to read.
+    """
+
+    fetch: str
+    truncated: bool
+
+
+class CompactHit(BaseModel):
+    """One compact `memory_search` hit (klams sprint 046, WI #1178).
+
+    The default agent-facing shape: enough to rank, cite and decide on,
+    plus `id` as the locator for the one `memory_get` that yields the
+    rest. `snippet` is a match-window excerpt of at most 320 characters
+    with elisions marked `…` — so it is *not* the memory's text, and
+    anything measuring a body needs `memory_search_full` or `memory_get`.
+
+    Typed metadata is omitted where it does not apply rather than faked,
+    which is why every field below the score block is optional: an
+    agent-added knowledge memory has no `source_path`, and a fact has
+    neither that nor `heading_path`.
+    """
+
+    id: UUID
+    kind: str
+    snippet: str
+    score: float
+    raw_score: float | None = None
+    source_rank: int
+    age_seconds: int
+    tags: list[str] = Field(default_factory=list)
+    author: str
+
+    # Knowledge locators.
+    source_path: str | None = None
+    repo: str | None = None
+    host: str | None = None
+    heading_path: str | None = None
+    supersedes: UUID | None = None
+    # Fact / event discriminators (`type` is reserved, hence the alias).
+    fact_type: str | None = Field(default=None, alias="type")
+    category: str | None = None
+    # Duplicate copies this hit absorbed at query time; omitted when it
+    # collapsed nothing.
+    copies: int | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class SearchResponse(BaseModel):
+    """The compact `memory_search` envelope: `{hits, more}`."""
+
+    hits: list[CompactHit]
+    more: More
+
+
 class RegisteredAuthor(BaseModel):
     author_id: UUID
     agent_name: str
@@ -219,6 +279,20 @@ class KlamsClient:
         args |= {k: v for k, v in optionals.items() if v is not None}
         return RegisteredAuthor.model_validate(await self._call("register_author", args))
 
+    @staticmethod
+    def _search_args(
+        query: str,
+        kinds: Sequence[str] | None,
+        tags: Sequence[str] | None,
+        top_k: int,
+    ) -> dict[str, Any]:
+        args: dict[str, Any] = {"query": query, "top_k": top_k}
+        if kinds is not None:
+            args["kinds"] = list(kinds)
+        if tags is not None:
+            args["tags"] = list(tags)
+        return args
+
     async def memory_search(
         self,
         query: str,
@@ -226,13 +300,41 @@ class KlamsClient:
         kinds: Sequence[str] | None = None,
         tags: Sequence[str] | None = None,
         top_k: int = 10,
+    ) -> SearchResponse:
+        """Search, compact — the shape agents actually receive.
+
+        klams sprint 046 (#1178) made compact the default for a measured
+        reason: 9,599 → 4,193 tokens per answered query, counting the
+        follow-up read when a snippet fell short. Hits carry a ≤320-char
+        `snippet`, not a body; reach for `memory_search_full` when you
+        need texts in bulk, or `memory_get` for one record.
+        """
+        args = self._search_args(query, kinds, tags, top_k)
+        return SearchResponse.model_validate(await self._call("memory_search", args))
+
+    async def memory_search_full(
+        self,
+        query: str,
+        *,
+        kinds: Sequence[str] | None = None,
+        tags: Sequence[str] | None = None,
+        top_k: int = 10,
     ) -> list[ScoredMemory]:
-        args: dict[str, Any] = {"query": query, "top_k": top_k}
-        if kinds is not None:
-            args["kinds"] = list(kinds)
-        if tags is not None:
-            args["tags"] = list(tags)
+        """Search with whole memory texts inline (`full: true`).
+
+        klams documents this as the path for "callers that genuinely want
+        bodies in bulk (eval harnesses, exports)" — which is exactly the
+        eval suite, extraction's duplicate check, and fact pairing, all
+        of which assert on full text or a fact payload. It returns the
+        pre-046 `{score, source_rank, raw_score, memory}` envelope, so
+        the eval baseline stays comparable across the contract change.
+        """
+        args = self._search_args(query, kinds, tags, top_k) | {"full": True}
         return _scored_memories.validate_python(await self._call("memory_search", args))
+
+    async def memory_get(self, memory_id: str) -> Memory:
+        """Fetch one memory whole — the tool `more.fetch` names."""
+        return _memory.validate_python(await self._call("memory_get", {"id": memory_id}))
 
     async def add_knowledge(
         self,

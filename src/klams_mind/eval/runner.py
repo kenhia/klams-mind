@@ -12,9 +12,30 @@ import json
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from klams_mind.config import KlamsConfig
 from klams_mind.eval.checks import CheckResult, RetrievedItem, evaluate_check
 from klams_mind.eval.suite import Suite
 from klams_mind.klams import KlamsClient, ScoredMemory
+
+
+def eval_klams_config(klams: KlamsConfig) -> tuple[KlamsConfig, bool]:
+    """The klams config an eval run should use, and whether it is distinct.
+
+    klams-mind #735: `search_sample`'s `caller` is the token grant's
+    `agent_name`, so presenting a second, eval-scoped token is the only
+    way a client can make its eval traffic distinguishable —
+    `register_author` does not touch it. Returns `(config, distinct)`;
+    `distinct=False` means the run will land in `search_sample`
+    indistinguishable from real agent queries, and mining it will feed
+    the suite its own golden queries.
+
+    Falling back is deliberate rather than fatal: an eval that refuses to
+    run measures nothing, which is worse than an eval whose rows need a
+    date bracket to mine.
+    """
+    if klams.eval_token:
+        return klams.model_copy(update={"token": klams.eval_token}), True
+    return klams.model_copy(), False
 
 
 class Retriever(Protocol):
@@ -112,5 +133,5 @@ class KlamsRetriever:
         self._client = client
 
     async def search(self, query: str, top_k: int) -> list[RetrievedItem]:
-        hits = await self._client.memory_search(query, top_k=top_k)
+        hits = await self._client.memory_search_full(query, top_k=top_k)
         return [_to_item(h) for h in hits]

@@ -1,67 +1,75 @@
 # Retrieval eval — homelab-retrieval
 
-- **Run:** 2026-07-26T21:16:34Z
-- **klams version:** 0.1.30
-- **Suite file:** `homelab-retrieval.toml` (`sha256:801c3790e61b`)
+- **Run:** 2026-09-11T05:34:33Z
+- **klams version:** 0.1.46
+- **Suite file:** `homelab-retrieval.toml` (`sha256:c81f0e2d606d`)
+- **Caller:** klams-mind
 
-**OK — 21/21 queries passed (100%).**
+**OK — 26/27 queries passed (96%).**
 
-0 regression(s), 0 known-open, 0 newly fixed.
+0 regression(s), 1 known-open, 0 newly fixed.
 
 ## Checks by type
 
 | Check | Passed |
 | --- | --- |
-| `memory_id` | 7/7 |
+| `memory_id` | 12/13 |
 | `min_body_chars` | 2/2 |
 | `no_duplicates` | 3/3 |
-| `no_hallucination` | 2/2 |
+| `no_hallucination` | 3/3 |
 | `source_cited` | 2/2 |
 | `substring` | 11/11 |
+
+## Known open (1)
+
+Failing by design — tracked work, not a regression.
+
+- **klams memory_search score field behavior ranking** — korg:2247
+  - ✗ `memory_id` `019fa04a-ceac` — 019fa04a-ceac absent from 8 result(s)
 
 ## Queries
 
 - ✓ **what container image does the klams service use** — 5 hit(s)
-  - `0.016` knowledge r0 — /home/ken/src/ai/klams/deploy/docker-compose.yml
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams/docs/architecture.md
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/.claude/skills/deploy-kubs0/SKILL.md
-  - `0.016` knowledge r3 — /home/ken/src/ai/klams/deploy/install-systemd.sh
-  - `0.015` knowledge r4 — /home/ken/src/ai/klams/.claude/skills/deploy-kubs0/SKILL.md
+  - `0.062` knowledge r7 — (no source)
+  - `0.061` knowledge r8 — (no source)
+  - `0.028` knowledge r4 — (no source)
+  - `0.016` knowledge r0 — /home/ken/src/ai/klams/sprints/planning/generalize-klams.md
+  - `0.016` knowledge r1 — /home/ken/src/ai/klams/deploy/docker-compose.yml
 - ✓ **what host runs the klams memory service** — 5 hit(s)
   - `0.016` knowledge r0 — /home/ken/.claude/projects/-home-ken-src-ai-klams/24452a45-60b8-45f6-813c-b62aa79ea18e.jsonl
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams/sprints/planning/archive/plan.md
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/README.md
+  - `0.016` knowledge r1 — /home/ken/src/ai/klams/README.md
+  - `0.016` knowledge r2 — /home/ken/src/ai/klams/sprints/planning/archive/plan.md
   - `0.016` knowledge r3 — /home/ken/src/ai/klams/sprints/003-non-agentic-writes/handoff/README.md
   - `0.015` knowledge r4 — /home/ken/src/ai/klams/sprints/planning/archive/tokenmaster-integration/analysis.md
 - ✓ **where does kvllm serve models** — 5 hit(s)
+  - `0.032` knowledge r3 — /home/ken/src/ai/klams/sprints/026-retrieval-measurement/sprint.md
+  - `0.031` knowledge r7 — /home/ken/src/ai/klams-mind/sprints/007-eval-provenance/sprint.md
   - `0.016` knowledge r0 — /home/ken/src/ai/kvllm/sprints/planning/00-kickoff.md
-  - `0.016` knowledge r1 — /home/ken/src/ai/kvllm/models.toml
-  - `0.016` knowledge r2 — /home/ken/src/ai/kvllm/justfile
-  - `0.016` knowledge r3 — /home/ken/src/ai/kvllm/README.md
-  - `0.015` knowledge r4 — /home/ken/src/ai/kvllm/sprints/planning/01-current-state-review.md
+  - `0.016` knowledge r1 — /home/ken/src/ai/kvllm/justfile
+  - `0.016` knowledge r2 — /home/ken/src/ai/kvllm/models.toml
 - ✓ **klams sprint bootstrap first light** — 5 hit(s)
-  - `0.016` knowledge r0 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
-  - `0.016` knowledge r3 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
-  - `0.015` knowledge r4 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
+  - `0.033` knowledge r0 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
+  - `0.032` knowledge r1 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
+  - `0.031` knowledge r4 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
+  - `0.031` knowledge r6 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
+  - `0.030` knowledge r8 — /home/ken/src/ai/klams-mind/sprints/001-bootstrap-first-light/sprint.md
 - ✓ **klams korg tools not available ToolSearch deferred lazily loaded** — 5 hit(s)
-  - `0.066` knowledge r0 — (no source)
-  - `0.065` knowledge r1 — (no source)
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/.github/memories/klams-usage.md
-  - `0.016` knowledge r3 — /home/ken/src/ai-agents/harness-eval/_eval/run_01/runs/transcripts/04-runlog-transcript.txt
-  - `0.015` knowledge r4 — /home/ken/src/tools/korg/sprints/review/REVIEW.md
+  - `0.098` knowledge r0 — (no source)
+  - `0.064` knowledge r2 — (no source)
+  - `0.063` knowledge r3 — (no source)
+  - `0.016` knowledge r1 — /home/ken/src/ai-agents/agent-skills/claude-md/CLAUDE.md
+  - `0.015` knowledge r4 — /home/ken/src/ai/klams/docs/klams-mcp-for-agents.md
 - ✓ **deferred MCP tools misdiagnosis** — 10 hit(s)
-  - `0.066` knowledge r0 — (no source)
+  - `0.098` knowledge r0 — (no source)
   - `0.065` knowledge r1 — (no source)
-  - `0.016` knowledge r2 — /home/ken/src/ai/kyac/sprints/post-mvp-review/architecture.md
-  - `0.016` knowledge r3 — /home/ken/src/atv/ATV-Phoenix/BUILDLOG.md
-  - `0.015` knowledge r4 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
-  - `0.015` knowledge r5 — /home/ken/src/tools/korg/scripts/post-deploy-check.sh
-  - `0.015` knowledge r6 — /home/ken/src/ai/multae-viae/crates/mv-core/src/mcp/registry.rs
-  - `0.015` knowledge r7 — /home/ken/src/ai/kyac/sprints/002-mcp-tools.md
-  - `0.014` knowledge r8 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
-  - `0.014` knowledge r9 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
+  - `0.063` knowledge r4 — (no source)
+  - `0.032` knowledge r3 — /home/ken/src/ai/klams/sprints/028-corpus-quality/sprint.md
+  - `0.031` knowledge r5 — /home/ken/src/ai/klams/sprints/028-corpus-quality/sprint.md
+  - `0.031` knowledge r6 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
+  - `0.016` knowledge r2 — /home/ken/src/ai-agents/agent-skills/claude-md/CLAUDE.md
+  - `0.015` knowledge r7 — /home/ken/src/ai/klams/docs/klams-mcp-for-agents.md
+  - `0.014` knowledge r8 — /home/ken/src/ai/klams/sprints/046-mcp-correctness/sprint.md
+  - `0.014` knowledge r9 — /home/ken/src/ai/kyac/sprints/post-mvp-review/architecture.md
 - ✓ **memory_add failed EMBEDDING_UNAVAILABLE should I retry** — 10 hit(s)
   - `0.066` knowledge r0 — (no source)
   - `0.016` knowledge r1 — /home/ken/src/ai/klams/sprints/007-mcp-server/tasks.md
@@ -69,32 +77,32 @@
   - `0.016` knowledge r3 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
   - `0.015` knowledge r4 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
   - `0.015` knowledge r5 — /home/ken/src/ai/klams/sprints/007-mcp-server/contracts/error-codes.md
-  - `0.015` knowledge r6 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
-  - `0.015` knowledge r7 — /home/ken/src/ai/klams/sprints/007-mcp-server/contracts/tools.md
+  - `0.015` knowledge r6 — /home/ken/src/ai/klams/crates/klams-mcp/src/tools/memory_search.rs
+  - `0.015` knowledge r7 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
   - `0.014` knowledge r8 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
   - `0.014` knowledge r9 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
 - ✓ **klams memory_add size ceiling how much text PAYLOAD_TOO_LARGE split** — 10 hit(s)
   - `0.066` knowledge r0 — (no source)
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams/docs/usage.md
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
-  - `0.016` knowledge r3 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
-  - `0.015` knowledge r4 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
-  - `0.015` knowledge r5 — /home/ken/src/ai/multae-viae/specs/010-klams-rag/plan.md
-  - `0.015` knowledge r6 — /home/ken/src/ai/klams/migrations/0012_oversize_write.sql
-  - `0.015` knowledge r7 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
+  - `0.016` knowledge r1 — /home/ken/src/ai-agents/agent-skills/docs/2026-08-01-klams-korg-surface.md
+  - `0.016` knowledge r2 — /home/ken/src/ai/klams/docs/usage.md
+  - `0.016` knowledge r3 — /home/ken/src/ai/klams/docs/klams-mcp-for-agents.md
+  - `0.015` knowledge r4 — /home/ken/src/ai-agents/agent-skills/docs/2026-08-01-klams-korg-surface.md
+  - `0.015` knowledge r5 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
+  - `0.015` knowledge r6 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
+  - `0.015` knowledge r7 — /home/ken/src/ai/klams/migrations/0012_oversize_write.sql
   - `0.014` knowledge r8 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
-  - `0.014` knowledge r9 — /home/ken/src/ai/multae-viae/specs/010-klams-rag/plan.md
+  - `0.014` knowledge r9 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
 - ✓ **mcp tools missing from my tool list is the server down** — 10 hit(s)
-  - `0.066` knowledge r0 — (no source)
   - `0.065` knowledge r1 — (no source)
-  - `0.016` knowledge r2 — /home/ken/src/ai/multae-viae/CLAUDE.md
-  - `0.016` knowledge r3 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
-  - `0.015` knowledge r4 — /home/ken/src/ai/kyac/kyac/bundle.py
-  - `0.015` knowledge r5 — /home/ken/src/tools/korg/docs/usage.md
-  - `0.015` knowledge r6 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
-  - `0.015` knowledge r7 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
-  - `0.014` knowledge r8 — /home/ken/src/ai/multae-viae/specs/004-mcp-integration/spec.md
-  - `0.014` knowledge r9 — /home/ken/src/ai/multae-viae/docs/04-mcp-integration.md
+  - `0.064` knowledge r2 — (no source)
+  - `0.063` knowledge r3 — (no source)
+  - `0.062` knowledge r4 — (no source)
+  - `0.061` knowledge r6 — sprints/015-protocol-version-negotiation/decisions.md
+  - `0.016` knowledge r0 — /home/ken/src/ai-agents/agent-skills/claude-md/CLAUDE.md
+  - `0.015` knowledge r5 — /home/ken/src/ai/klams/docs/klams-mcp-for-agents.md
+  - `0.015` knowledge r7 — /home/ken/src/ai/kyac/kyac/mcp.py
+  - `0.014` knowledge r8 — /home/ken/src/ai/kyac/kyac/mcp.py
+  - `0.014` knowledge r9 — /home/ken/src/ai/kyac/sprints/015-korg-allowlist-refresh.md
 - ✓ **rpidash3 raspberry pi machine specs** — 5 hit(s)
   - `0.066` knowledge r0 — (no source)
   - `0.065` knowledge r1 — (no source)
@@ -102,113 +110,152 @@
   - `0.016` knowledge r3 — /home/ken/src/tools/kdeskdash/CLAUDE.md
   - `0.015` knowledge r4 — /home/ken/src/tools/kdeskdash/sprints/018-multi-pi-deploy.md
 - ✓ **rpidash3 tailscale ed25519 passwordless sudo cloud-init groups** — 10 hit(s)
-  - `0.066` knowledge r0 — (no source)
+  - `0.098` knowledge r0 — (no source)
   - `0.065` knowledge r1 — (no source)
-  - `0.063` knowledge r4 — (no source)
-  - `0.062` knowledge r5 — (no source)
-  - `0.016` knowledge r2 — /home/ken/src/ai/kmon/vmlab/cloud-init.yaml
+  - `0.062` knowledge r6 — (no source)
+  - `0.059` knowledge r10 — (no source)
+  - `0.016` knowledge r2 — /home/ken/src/tools/kdeskdash/sprints/026-kwork-rpidash3-pairing.md
   - `0.016` knowledge r3 — /home/ken/src/tools/kwebi/README.md
-  - `0.015` knowledge r6 — /home/ken/src/tools/kdeskdash/deploy/hosts/rpidash3.env
-  - `0.015` knowledge r7 — /home/ken/src/tools/kdeskdash/README.md
-  - `0.014` knowledge r8 — /home/ken/src/tools/kdeskdash/deploy/hosts/README.md
-  - `0.014` knowledge r9 — /home/ken/src/tools/kpidash/README.md
+  - `0.015` knowledge r4 — /home/ken/src/tools/kdeskdash/sprints/018-multi-pi-deploy.md
+  - `0.015` knowledge r5 — /home/ken/src/tools/kdeskdash/sprints/026-kwork-rpidash3-pairing.md
+  - `0.015` knowledge r7 — /home/ken/src/tools/kdeskdash/sprints/026-kwork-rpidash3-pairing.md
+  - `0.014` knowledge r8 — /home/ken/src/ai/homelab-ai-plan/decisions/2026-07-11-tls-and-auth-direction.md
 - ✓ **rpidash3 dashboard raspberry pi** — 10 hit(s)
-  - `0.065` knowledge r1 — (no source)
-  - `0.064` knowledge r2 — (no source)
-  - `0.016` knowledge r0 — /home/ken/src/tools/kdeskdash/CLAUDE.md
+  - `0.097` knowledge r1 — (no source)
+  - `0.096` knowledge r2 — (no source)
+  - `0.033` knowledge r0 — /home/ken/src/tools/kdeskdash/CLAUDE.md
+  - `0.031` knowledge r4 — (no source)
   - `0.016` knowledge r3 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
-  - `0.015` knowledge r4 — /home/ken/src/tools/kpidash/specs/001-mvp-dashboard/plan.md
-  - `0.015` knowledge r5 — /home/ken/src/tools/kdeskdash/sprints/planning/multi-build-and-hardware.md
-  - `0.015` knowledge r6 — /home/ken/src/tools/kdeskdash/.github/copilot-instructions.md
-  - `0.015` knowledge r7 — /home/ken/src/README-SRC.md
-  - `0.014` knowledge r8 — /home/ken/src/tools/kdeskdash/deploy/hosts/rpidash3.env
-  - `0.014` knowledge r9 — /home/ken/src/tools/kpidash/docs/ARCHITECTURE.md
+  - `0.015` knowledge r5 — /home/ken/src/tools/kpidash/sprints/001-mvp-dashboard/plan.md
+  - `0.015` knowledge r6 — /home/ken/src/tools/kstudiodash/lib/kdashdata/docs/architecture.md
+  - `0.015` knowledge r7 — /home/ken/src/tools/kdeskdash/sprints/planning/multi-build-and-hardware.md
+  - `0.014` knowledge r8 — /home/ken/src/tools/kdeskdash/.github/copilot-instructions.md
+  - `0.014` knowledge r9 — /home/ken/src/tools/kpidash/CLAUDE.md
 - ✓ **kpidash dashboard build commands** — 10 hit(s)
-  - `0.059` knowledge r14 — (no source)
-  - `0.057` knowledge r19 — (no source)
-  - `0.056` knowledge r22 — (no source)
-  - `0.016` knowledge r0 — /home/ken/src/tools/kpidash/docs/IMPLEMENTATION-PLAN.md
+  - `0.060` knowledge r13 — (no source)
+  - `0.058` knowledge r16 — (no source)
+  - `0.056` knowledge r20 — (no source)
+  - `0.055` knowledge r23 — (no source)
+  - `0.033` knowledge r0 — /home/ken/src/tools/kpidash/docs/IMPLEMENTATION-PLAN.md
+  - `0.032` knowledge r4 — /home/ken/src/ai/klams/sprints/026-retrieval-measurement/sprint.md
+  - `0.031` knowledge r5 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
   - `0.016` knowledge r1 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
-  - `0.016` knowledge r2 — /home/ken/src/tools/kpidash/specs/006-layout-refresh-status-cards/quickstart.md
-  - `0.016` knowledge r3 — /home/ken/src/tools/kpidash/docs/ARCHITECTURE.md
-  - `0.015` knowledge r4 — /home/ken/src/tools/kdeskdash/sprints/002-mvp-multimode-shell/plan.md
-  - `0.015` knowledge r5 — /home/ken/src/tools/kpidash/specs/001-mvp-dashboard/plan.md
-  - `0.015` knowledge r6 — /home/ken/src/tools/kpidash/specs/012-backlog-ui/sprint.md
+  - `0.016` knowledge r2 — /home/ken/src/tools/kpidash/sprints/006-layout-refresh-status-cards/quickstart.md
+  - `0.016` knowledge r3 — /home/ken/src/ai/klams/deploy/config/monitor.example.toml
 - ✓ **kpidash cross compilation aarch64 toolchain** — 10 hit(s)
-  - `0.016` knowledge r0 — /home/ken/src/tools/kpidash/specs/001-mvp-dashboard/quickstart.md
-  - `0.016` knowledge r1 — /home/ken/src/tools/kpidash/specs/001-mvp-dashboard/quickstart.md
-  - `0.016` knowledge r2 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
+  - `0.033` knowledge r0 — /home/ken/src/tools/kpidash/sprints/001-mvp-dashboard/quickstart.md
+  - `0.032` knowledge r2 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
+  - `0.031` knowledge r4 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
+  - `0.028` knowledge r19 — /home/ken/src/ai/klams/sprints/026-retrieval-measurement/sprint.md
+  - `0.016` knowledge r1 — /home/ken/src/tools/kpidash/sprints/001-mvp-dashboard/quickstart.md
   - `0.016` knowledge r3 — /home/ken/src/tools/kpidash/README.md
-  - `0.015` knowledge r4 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
-  - `0.015` knowledge r5 — /home/ken/src/tools/kpidash/.github/agents/copilot-instructions.md
+  - `0.015` knowledge r5 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
   - `0.015` knowledge r6 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
   - `0.015` knowledge r7 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
-  - `0.014` knowledge r8 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
-  - `0.014` knowledge r9 — /home/ken/src/tools/kdeskdash/sprints/001-premvp-display-touch/plan.md
+  - `0.014` knowledge r8 — /home/ken/src/tools/kdeskdash/sprints/001-premvp-display-touch/plan.md
 - ✓ **kpidash dashboard build commands** — 5 hit(s)
-  - `0.062` knowledge r7 — (no source)
-  - `0.060` knowledge r11 — (no source)
-  - `0.059` knowledge r12 — (no source)
-  - `0.016` knowledge r0 — /home/ken/src/tools/kpidash/docs/IMPLEMENTATION-PLAN.md
-  - `0.016` knowledge r1 — /home/ken/src/tools/kpidash/docs/HANDOFF-CROSSCOMPILE.md
+  - `0.062` knowledge r8 — (no source)
+  - `0.060` knowledge r10 — (no source)
+  - `0.059` knowledge r13 — (no source)
+  - `0.058` knowledge r15 — (no source)
+  - `0.033` knowledge r0 — /home/ken/src/tools/kpidash/docs/IMPLEMENTATION-PLAN.md
 - ✓ **klams gate fmt clippy test** — 5 hit(s)
-  - `0.016` knowledge r0 — /home/ken/src/ai/klams/AGENTS.md
-  - `0.016` knowledge r1 — /home/ken/.claude/projects/-home-ken-src-ai-klams/24452a45-60b8-45f6-813c-b62aa79ea18e.jsonl
-  - `0.016` knowledge r2 — /home/ken/src/ai-agents/harness-eval/run-output/run_02/07-baseline-claude/README.md
-  - `0.016` knowledge r3 — /home/ken/src/ai/multae-viae/justfile
-  - `0.015` knowledge r4 — /home/ken/.claude/projects/-home-ken-src-ai-klams/24452a45-60b8-45f6-813c-b62aa79ea18e.jsonl
+  - `0.033` knowledge r0 — /home/ken/src/ai/klams/sprints/002-safety-and-write-ops/spec.md
+  - `0.032` knowledge r1 — /home/ken/src/ai/klams/sprints/002-safety-and-write-ops/plan.md
+  - `0.031` knowledge r3 — /home/ken/src/ai/klams/sprints/002-safety-and-write-ops/spec.md
+  - `0.031` knowledge r4 — /home/ken/src/ai/klams/AGENTS.md
+  - `0.031` knowledge r5 — /home/ken/src/ai/klams/justfile
 - ✓ **EMBEDDING_UNAVAILABLE** — 10 hit(s)
-  - `0.066` knowledge r0 — (no source)
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
-  - `0.016` knowledge r3 — /home/ken/src/ai/krag/apps/krager/src/lib/components/domain/SystemStatus.svelte
-  - `0.015` knowledge r4 — /home/ken/src/ai/krag/apps/krager/src/lib/components/domain/SystemStatus.test.ts
-  - `0.015` knowledge r5 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_search.rs
-  - `0.015` knowledge r6 — /home/ken/src/ai/krag/specs/005-code-aware-indexing/contracts/embedding-orchestrator.md
-  - `0.015` knowledge r7 — /home/ken/src/ai/klams/crates/klams-store/src/embeddings.rs
-  - `0.014` knowledge r8 — /home/ken/src/blizzard/wowadd/AcePlay/Libs/AceBucket-3.0/AceBucket-3.0.lua
-  - `0.014` knowledge r9 — /home/ken/src/blizzard/wowadd/AcePlay/Libs/AceComm-3.0/AceComm-3.0.lua
+  - `0.094` knowledge r4 — (no source)
+  - `0.033` knowledge r0 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
+  - `0.032` knowledge r1 — /home/ken/src/ai/klams/crates/klams-mcp/src/tools/memory_search.rs
+  - `0.032` knowledge r2 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
+  - `0.031` knowledge r3 — /home/ken/src/ai/klams/sprints/007-mcp-server/contracts/error-codes.md
+  - `0.030` knowledge r5 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
+  - `0.030` knowledge r6 — /home/ken/src/ai/klams/crates/klams-mcp/src/errors.rs
+  - `0.029` knowledge r7 — /home/ken/src/ai/klams/sprints/027-ingest-correctness/sprint.md
+  - `0.029` knowledge r8 — /home/ken/src/ai/klams/docs/reviews/2026-07-25-deep-review.md
+  - `0.029` knowledge r9 — /home/ken/src/ai/klams/sprints/007-mcp-server/contracts/error-codes.md
 - ✓ **LOW_SCORE_THRESHOLD** — 10 hit(s)
-  - `0.016` knowledge r0 — /home/ken/src/ai/klams/crates/klams-mcp/src/tools/memory_search.rs
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams/sprints/026-retrieval-measurement/sprint.md
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/docs/architecture.md
-  - `0.016` knowledge r3 — /home/ken/src/ai/krag/tests/contract/test_retriever_contract.py
-  - `0.015` knowledge r4 — /home/ken/src/ai/klams/crates/klams-mcp/src/tools/memory_search.rs
-  - `0.015` knowledge r5 — /home/ken/src/ai/klams/crates/klams-mcp/src/tools/memory_search.rs
-  - `0.015` knowledge r6 — /home/ken/src/ai/krag/specs/004-rag-quality-tuning/research.md
-  - `0.015` knowledge r7 — /home/ken/src/ai/krag/tests/contract/test_retriever_contract.py
-  - `0.014` knowledge r8 — /home/ken/src/ai/krag/src/krag/critic/relevance_critic.py
-  - `0.014` knowledge r9 — /home/ken/src/ai/krag/tests/unit/test_relevance_critic.py
+  - `0.033` knowledge r0 — /home/ken/src/ai/klams/docs/reviews/2026-07-28-retrospective.md
+  - `0.032` knowledge r1 — /home/ken/src/ai/klams/sprints/026-retrieval-measurement/sprint.md
+  - `0.032` knowledge r2 — /home/ken/src/ai/klams/crates/klams-core/src/provenance.rs
+  - `0.031` knowledge r3 — /home/ken/src/ai/krag/tests/contract/test_retriever_contract.py
+  - `0.031` knowledge r4 — /home/ken/src/ai/klams/crates/klams-core/src/retrieval.rs
+  - `0.030` knowledge r5 — /home/ken/src/ai/klams/crates/klams-core/src/retrieval.rs
+  - `0.030` knowledge r6 — /home/ken/src/ai/klams/crates/klams-core/src/retrieval.rs
+  - `0.029` knowledge r7 — /home/ken/src/ai/klams/crates/klams-core/src/retrieval.rs
+  - `0.029` knowledge r9 — /home/ken/src/ai/krag/tests/contract/test_retriever_contract.py
+  - `0.028` knowledge r12 — /home/ken/src/ai/krag/tests/unit/test_relevance_critic.py
 - ✓ **encke-wahoo.ts.net tailnet hostname** — 10 hit(s)
   - `0.066` knowledge r0 — (no source)
   - `0.065` knowledge r1 — (no source)
-  - `0.016` knowledge r2 — /home/ken/src/ai/homelab-ai-plan/385_386_response.md
-  - `0.016` knowledge r3 — /home/ken/src/tools/kwebi/sprints/002-tailnet-health-routing.md
-  - `0.015` knowledge r4 — (no source)
-  - `0.015` knowledge r5 — /home/ken/src/ai/homelab-ai-plan/plan.md
-  - `0.015` knowledge r6 — /home/ken/src/ai/homelab-ai-plan/machine-changes-pending.md
-  - `0.015` knowledge r7 — (no source)
-  - `0.014` knowledge r8 — /home/ken/src/ai/homelab-ai-plan/decisions/2026-07-11-tls-and-auth-direction.md
-  - `0.014` knowledge r9 — /home/ken/src/ai/homelab-ai-plan/decisions/2026-07-11-tls-and-auth-direction.md
+  - `0.063` knowledge r2 — (no source)
+  - `0.057` knowledge r16 — (no source)
+  - `0.032` knowledge r3 — /home/ken/src/tools/kfdc/curator/hints.test.ts
+  - `0.031` knowledge r7 — /home/ken/src/ai-agents/agent-skills/claude-md/hosts/komarchy.md
+  - `0.030` knowledge r11 — (no source)
+  - `0.015` knowledge r4 — /home/ken/src/ai/homelab-ai-plan/plan.md
+  - `0.015` knowledge r5 — (no source)
+  - `0.015` knowledge r6 — /home/ken/src/tools/kpidash/sprints/016-fleet-deploy-khlenv-client.md
 - ✓ **find_knowledge_by_content_hash** — 10 hit(s)
-  - `0.016` knowledge r0 — /home/ken/src/ai/klams/crates/klams-core/tests/queue.rs
-  - `0.016` knowledge r1 — /home/ken/src/ai/klams/crates/klams-store/src/composite.rs
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_events.rs
-  - `0.016` knowledge r3 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_context.rs
-  - `0.015` knowledge r4 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_search.rs
-  - `0.015` knowledge r5 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_events.rs
-  - `0.015` knowledge r6 — /home/ken/src/ai/klams/crates/klams-store/src/lib.rs
-  - `0.015` knowledge r7 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_dissents.rs
-  - `0.014` knowledge r8 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_knowledge.rs
-  - `0.014` knowledge r9 — /home/ken/src/ai/klams/crates/klams-store/src/qdrant.rs
+  - `0.032` knowledge r2 — /home/ken/src/ai/klams/crates/klams-core/tests/queue.rs
+  - `0.032` knowledge r3 — /home/ken/src/ai/klams/crates/klams-api/tests/rest_route_scopes.rs
+  - `0.031` knowledge r4 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_context.rs
+  - `0.031` knowledge r5 — /home/ken/src/ai/klams/crates/klams-api/tests/contract_context.rs
+  - `0.030` knowledge r6 — /home/ken/src/ai/klams/crates/klams-store/src/lib.rs
+  - `0.029` knowledge r11 — /home/ken/src/ai/klams/crates/klams-store/src/lib.rs
+  - `0.029` knowledge r12 — /home/ken/src/ai/klams/crates/klams-core/src/knowledge_write.rs
+  - `0.028` knowledge r13 — /home/ken/src/ai/klams/crates/klams-store/src/qdrant.rs
+  - `0.028` knowledge r14 — /home/ken/src/ai/klams/crates/klams-core/src/retrieval.rs
+  - `0.027` knowledge r17 — /home/ken/src/ai/klams/sprints/026-retrieval-measurement/sprint.md
 - ✓ **klams listen_addr config key** — 10 hit(s)
-  - `0.065` knowledge r1 — (no source)
+  - `0.065` knowledge r2 — (no source)
   - `0.064` knowledge r3 — (no source)
+  - `0.060` knowledge r9 — (no source)
   - `0.016` knowledge r0 — /home/ken/src/ai/klams/deploy/config/klams.example.toml
-  - `0.016` knowledge r2 — /home/ken/src/ai/klams-mind/README.md
-  - `0.015` knowledge r4 — /home/ken/src/ai/klams-mind/config.example.toml
+  - `0.016` knowledge r1 — /home/ken/src/ai/klams-view/src/config.rs
+  - `0.015` knowledge r4 — /home/ken/src/ai/klams-mind/README.md
   - `0.015` knowledge r5 — /home/ken/.claude/projects/-home-ken-src-ai-klams/24452a45-60b8-45f6-813c-b62aa79ea18e.jsonl
-  - `0.015` knowledge r6 — /home/ken/src/ai/klams/sprints/planning/archive/viewport.md
-  - `0.015` knowledge r7 — /home/ken/src/ai/klams/crates/klams-scanner/src/main.rs
-  - `0.014` knowledge r8 — /home/ken/src/ai/klams/docs/setup.md
-  - `0.014` knowledge r9 — /home/ken/src/ai/klams/docs/setup.md
+  - `0.015` knowledge r6 — /home/ken/src/ai/klams/docs/setup.md
+  - `0.015` knowledge r7 — /home/ken/src/ai/klams/justfile
+  - `0.014` knowledge r8 — /home/ken/src/ai/klams/docs/usage.md
+- ○ **klams memory_search score field behavior ranking** — 8 hit(s)
+  - `0.066` knowledge r0 — (no source)
+  - `0.029` knowledge r1 — (no source)
+  - `0.016` knowledge r2 — /home/ken/src/ai/klams/sprints/planning/2026-07-crossroads.md
+  - `0.016` knowledge r3 — /home/ken/src/ai/klams-mind/sprints/planning/001-cross-project-note.md
+  - `0.015` knowledge r4 — /home/ken/src/ai/klams/sprints/planning/roadmap.md
+  - `0.015` knowledge r5 — /home/ken/.claude/projects/-home-ken-src-ai-klams/24452a45-60b8-45f6-813c-b62aa79ea18e.jsonl
+  - `0.015` knowledge r6 — /home/ken/.claude/projects/-home-ken-src-ai-klams/24452a45-60b8-45f6-813c-b62aa79ea18e.jsonl
+  - `0.015` knowledge r7 — /home/ken/src/ai/klams-mind/sprints/004-scored-retrieval/sprint.md
+- ✓ **axum middleware layer nested router auth not applied** — 5 hit(s)
+  - `0.066` knowledge r0 — crates/klams-service/src/main.rs
+  - `0.032` knowledge r2 — /home/ken/src/ai/klams/docs/reviews/2026-07-28-retrospective.md
+  - `0.032` knowledge r4 — /home/ken/src/ai/klams/docs/reviews/2026-07-28-retrospective.md
+  - `0.016` knowledge r1 — /home/ken/src/ai/klams/docs/architecture.md
+  - `0.016` knowledge r3 — /home/ken/src/ai/klams/sprints/001-initial-mvp/tasks.md
+- ✓ **rmcp allowed_hosts 403 forbidden host header** — 5 hit(s)
+  - `0.098` knowledge r0 — crates/klams-mcp/src/transport.rs
+  - `0.016` knowledge r1 — /home/ken/src/ai/karc/deploy/config.example.toml
+  - `0.016` knowledge r2 — /home/ken/src/ai/kaed/sprints/001-walking-skeleton/deploy.md
+  - `0.016` knowledge r3 — /home/ken/src/opc/copyparty/copyparty/httpcli.py
+  - `0.015` knowledge r4 — /home/ken/src/ai/klams/docs/architecture.md
+- ✓ **agent-skills repo kubs0 kai claude hooks deploy install.sh** — 5 hit(s)
+  - `0.065` knowledge r2 — (no source)
+  - `0.063` knowledge r5 — (no source)
+  - `0.062` knowledge r6 — (no source)
+  - `0.061` knowledge r7 — (no source)
+  - `0.060` knowledge r8 — (no source)
+- ✓ **Claude Code session title aiTitle customTitle transcript auto-generated name** — 5 hit(s)
+  - `0.098` knowledge r0 — (no source)
+  - `0.063` knowledge r5 — (no source)
+  - `0.032` knowledge r1 — /home/ken/src/tools/kdeskdash/publisher/README.md
+  - `0.032` knowledge r2 — /home/ken/src/tools/kdeskdash/sprints/020-claude-session-titles.md
+  - `0.016` knowledge r3 — /home/ken/src/tools/kdeskdash/publisher/claude-pub.sh
+- ✓ **klams gotcha** — 5 hit(s)
+  - `0.033` knowledge r0 — (no source)
+  - `0.032` knowledge r1 — /home/ken/src/ai/klams/sprints/037-recall-lexical-decision/sprint.md
+  - `0.032` knowledge r2 — (no source)
+  - `0.031` knowledge r3 — /home/ken/src/ai/klams/sprints/037-recall-lexical-decision/sprint.md
+  - `0.031` knowledge r4 — /home/ken/src/ai/kmon/sprints/18-klams-suppression/README.md

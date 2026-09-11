@@ -9,6 +9,7 @@ marked `live` and skipped unless KLAMS_URL and KLAMS_TOKEN are set.
 import json
 import os
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
@@ -147,18 +148,55 @@ async def test_register_author_calls_tool_and_parses() -> None:
     assert author.agent_name == "klams-mind"
 
 
+# Recorded 2026-09-10 from live kubs0:7777 at klams 0.1.46 — the compact
+# response contract (klams sprint 046, WI #1178). Typed metadata is
+# omitted where it does not apply, so this agent-added knowledge hit
+# carries no `source_path`; a scanner chunk would.
+COMPACT_SEARCH_OUT = {
+    "hits": [
+        {
+            "id": "019f5330-46b1-7e03-a8a2-503681c52543",
+            "kind": "knowledge",
+            "snippet": "Homelab HTTPS is now Tailscale (tailnet encke-wahoo.ts.net)\u2026",
+            "score": 0.032786883,
+            "raw_score": 0.45266056,
+            "source_rank": 0,
+            "age_seconds": 5297070,
+            "tags": ["tailscale", "https", "homelab"],
+            "author": "claude",
+        },
+        {
+            "id": "019fd554-bc12-7623-a2f8-de0ee654265c",
+            "kind": "knowledge",
+            "snippet": "klams-scanner on kai now deploys from the homelab package store.",
+            "score": 0.06453292,
+            "raw_score": 0.6672274,
+            "source_rank": 2,
+            "age_seconds": 91234,
+            "tags": ["klams", "deploy"],
+            "author": "claude",
+            "source_path": "sprints/042-scanner-from-store/sprint.md",
+            "repo": "klams",
+            "heading_path": "Sprint 042 > How to deploy",
+            "copies": 2,
+        },
+    ],
+    "more": {"fetch": "memory_get", "truncated": True},
+}
+
 # --- memory_search ----------------------------------------------------------
 
 
-async def test_memory_search_parses_scored_kinds() -> None:
+async def test_memory_search_full_parses_scored_kinds() -> None:
     caller = FakeToolCaller(tool_ok([scored(FACT_MEMORY, 0.31, 1), scored(KNOWLEDGE_MEMORY)]))
     client = make_client(caller)
 
-    hits = await client.memory_search("kvllm endpoint", top_k=5)
+    hits = await client.memory_search_full("kvllm endpoint", top_k=5)
 
     name, args = caller.calls[0]
     assert name == "memory_search"
-    assert args == {"query": "kvllm endpoint", "top_k": 5}
+    # klams 046: bodies inline are opt-in, and this is the eval-harness path.
+    assert args == {"query": "kvllm endpoint", "top_k": 5, "full": True}
     assert hits[0].score == 0.31
     assert hits[0].source_rank == 1
     assert isinstance(hits[0].memory, FactMemory)
@@ -169,16 +207,98 @@ async def test_memory_search_parses_scored_kinds() -> None:
     assert hits[1].memory.author.agent_name == "claude-code"
 
 
-async def test_memory_search_passes_filters() -> None:
+async def test_memory_search_full_passes_filters() -> None:
     caller = FakeToolCaller(tool_ok([]))
     client = make_client(caller)
 
-    hits = await client.memory_search("anything", kinds=["knowledge"], tags=["homelab"])
+    hits = await client.memory_search_full("anything", kinds=["knowledge"], tags=["homelab"])
 
     _, args = caller.calls[0]
     assert args["kinds"] == ["knowledge"]
     assert args["tags"] == ["homelab"]
     assert hits == []
+
+
+# --- memory_search: the compact contract (klams 046 / #1178) -----------------
+
+
+async def test_memory_search_parses_the_compact_envelope() -> None:
+    """The regression that broke every klams-mind retrieval path.
+
+    klams 0.1.46 returns `{hits, more}`; klams-mind validated the body as
+    a bare `list[ScoredMemory]` and raised `ValidationError: Input should
+    be a valid list` on smoke, evals, extraction and pairing alike.
+    """
+    caller = FakeToolCaller(tool_ok(COMPACT_SEARCH_OUT))
+    client = make_client(caller)
+
+    resp = await client.memory_search("homelab https", top_k=3)
+
+    name, args = caller.calls[0]
+    assert name == "memory_search"
+    # Compact is klams' default and klams-mind's: no `full` on the wire.
+    assert args == {"query": "homelab https", "top_k": 3}
+    assert [h.id for h in resp.hits] == [
+        UUID("019f5330-46b1-7e03-a8a2-503681c52543"),
+        UUID("019fd554-bc12-7623-a2f8-de0ee654265c"),
+    ]
+    assert resp.hits[0].snippet.endswith("\u2026")
+    assert resp.hits[0].score == 0.032786883
+    assert resp.hits[0].raw_score == 0.45266056
+    assert resp.hits[0].source_rank == 0
+    assert resp.hits[0].age_seconds == 5297070
+    assert resp.hits[0].author == "claude"
+    assert resp.more.fetch == "memory_get"
+    assert resp.more.truncated is True
+
+
+async def test_compact_hit_omits_metadata_that_does_not_apply() -> None:
+    """klams omits rather than fakes, so these are None/absent, not ""."""
+    caller = FakeToolCaller(tool_ok(COMPACT_SEARCH_OUT))
+    client = make_client(caller)
+
+    agent_written, scanned = (await client.memory_search("q")).hits
+
+    assert agent_written.source_path is None
+    assert agent_written.heading_path is None
+    assert agent_written.repo is None
+    assert agent_written.copies is None
+    assert scanned.source_path == "sprints/042-scanner-from-store/sprint.md"
+    assert scanned.heading_path == "Sprint 042 > How to deploy"
+    assert scanned.repo == "klams"
+    assert scanned.copies == 2
+
+
+async def test_memory_search_compact_passes_filters() -> None:
+    caller = FakeToolCaller(
+        tool_ok({"hits": [], "more": {"fetch": "memory_get", "truncated": False}})
+    )
+    client = make_client(caller)
+
+    resp = await client.memory_search("anything", kinds=["fact"], tags=["homelab"])
+
+    _, args = caller.calls[0]
+    assert args["kinds"] == ["fact"]
+    assert args["tags"] == ["homelab"]
+    assert resp.hits == []
+    assert resp.more.truncated is False
+
+
+# --- memory_get -------------------------------------------------------------
+
+
+async def test_memory_get_fetches_the_full_record() -> None:
+    """`more.fetch` names this tool; it is the compact path's follow-up."""
+    caller = FakeToolCaller(tool_ok(KNOWLEDGE_MEMORY))
+    client = make_client(caller)
+
+    memory = await client.memory_get("01980000-0000-7000-8000-00000000000b")
+
+    name, args = caller.calls[0]
+    assert name == "memory_get"
+    assert args == {"id": "01980000-0000-7000-8000-00000000000b"}
+    assert isinstance(memory, KnowledgeMemory)
+    assert "kai:8000" in memory.text
 
 
 # --- memory_add -------------------------------------------------------------
@@ -321,5 +441,21 @@ async def test_live_round_trip() -> None:
             text="klams-mind sprint 001 live round-trip marker",
             tags=["klams-mind", "smoke-test"],
         )
-        hits = await client.memory_search("klams-mind sprint 001 live round-trip marker", top_k=10)
-        assert any(h.memory.id == added.id for h in hits)
+        marker = "klams-mind sprint 001 live round-trip marker"
+
+        # Compact is the default agent path (klams 046 / #1178). This
+        # assertion is the one that was missing when klams 0.1.46 landed:
+        # the unit tests all faked the transport, so nothing in the suite
+        # noticed the envelope change until smoke failed in sprint 009.
+        compact = await client.memory_search(marker, top_k=10)
+        assert compact.more.fetch == "memory_get"
+        assert any(h.id == added.id for h in compact.hits)
+
+        # Bodies inline — the eval harness's path, and what keeps the
+        # retrieval baseline comparable across the contract change.
+        full = await client.memory_search_full(marker, top_k=10)
+        assert any(h.memory.id == added.id for h in full)
+
+        # And the follow-up `more.fetch` names.
+        fetched = await client.memory_get(str(added.id))
+        assert fetched.id == added.id

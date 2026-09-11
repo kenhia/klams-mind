@@ -49,6 +49,16 @@ uv run klams-mind smoke          # the same thing, without just
 one memory search, and makes one LLM call through the configured
 endpoint. Exit 0 means all four legs work.
 
+When a leg fails, `smoke` names the leaf cause and what to do about it
+rather than the `ExceptionGroup` the MCP client wrapped it in — klams
+unreachable (with the URL it actually tried), `KLAMS_TOKEN` rejected
+(with the HTTP status), or a response it could not parse (which is what
+klams/klams-mind contract drift looks like). No `--debug` needed. If the
+URL's host is this machine, it also points at the loopback override,
+because the homelab default `http://kubs0:7777` does not work *on*
+kubs0: the name resolves to 127.0.1.1 while klams binds 127.0.0.1 and
+the tailnet address.
+
 ### Retrieval evals
 
 ```sh
@@ -64,6 +74,24 @@ klams `memory_search` (deterministic — no LLM in the loop):
 - `substring` — expected text appears in retrieved content (content recall)
 - `source_cited` — expected source/tag appears among the hits (source recall)
 - `no_hallucination` — a forbidden fragment is *absent* from all hits (precision)
+- `no_duplicates` — no two hits share a `content_hash`
+- `min_body_chars` — no hit's body (breadcrumb stripped) is below a floor
+- `memory_id` — a specific memory id is retrieved, optionally within `max_rank`
+
+Eval runs ask klams for **whole memory texts** (`full: true`), which
+klams documents as the path for "callers that genuinely want bodies in
+bulk (eval harnesses, exports)". That is deliberate: half these checks
+assert on a body, and the default compact response carries a ≤320-char
+match-window snippet instead. See "The klams search contract" below.
+
+**Eval-run identity.** Set `KLAMS_EVAL_TOKEN` to a second, read-scoped
+klams grant whose `[[auth.tokens]].agent_name` is the eval suite's own
+(`klams-mind-eval` by default; override with `KLAMS_EVAL_AGENT_NAME`).
+klams logs a search's `caller` from the *token's* grant, not from
+`register_author`, so a distinct token is the only way to keep eval
+traffic out of the pool that gets mined for new eval queries — otherwise
+the suite is fed its own golden queries. The run works without one and
+says so on stderr; every report stamps the `Caller` it ran as.
 
 Exit code is **0** if every check passes, **1** if any check fails, **2**
 for a bad suite file — so CI can gate on it. Reports list every hit with
@@ -144,8 +172,8 @@ Defaults target the homelab (klams at `kubs0:7777`, kvllm at
 copy [config.example.toml](config.example.toml) to
 `~/.config/klams-mind/config.toml` (or point `KLAMS_MIND_CONFIG` at a
 file). Environment variables beat the file: `KLAMS_URL`, `KLAMS_TOKEN`,
-`KLAMS_MIND_MODEL_URL`, `KLAMS_MIND_MODEL_NAME`,
-`KLAMS_MIND_MODEL_API_KEY`. A `./.env` is auto-loaded (real environment
+`KLAMS_EVAL_TOKEN`, `KLAMS_EVAL_AGENT_NAME`, `KLAMS_MIND_MODEL_URL`,
+`KLAMS_MIND_MODEL_NAME`, `KLAMS_MIND_MODEL_API_KEY`. A `./.env` is auto-loaded (real environment
 variables still win), so dropping `KLAMS_TOKEN=...` in `.env` is enough
 for live runs — `.env` is gitignored; keep the token out of the repo.
 The klams token is required for anything beyond `/healthz`.
@@ -153,6 +181,30 @@ The klams token is required for anything beyond `/healthz`.
 Note: klams exposes `register_author` / `memory_search` / `memory_add`
 only as MCP tools (Streamable HTTP at `{KLAMS_URL}/mcp`), not REST —
 the client wraps them via the official `mcp` SDK.
+
+### The klams search contract
+
+klams sprint 046 (WI #1178) made `memory_search` **compact by default**:
+each hit carries a match-window `snippet` of at most 320 characters plus
+a locator, and the response ends with
+`more: {"fetch": "memory_get", "truncated": …}`. The motive is measured
+— 9,599 → 4,193 tokens per answered query, counting the follow-up read
+when a snippet fell short. Typed metadata (`source_path`, `heading_path`,
+`repo`, fact `type`, event `category`, `copies`) is omitted where it does
+not apply rather than faked, so those fields are all optional.
+
+klams-mind mirrors the distinction in two methods rather than a flag
+with a union return type:
+
+| Method | Returns | For |
+|---|---|---|
+| `memory_search` | `SearchResponse` — `hits: list[CompactHit]`, `more` | The ordinary agent path. `smoke` uses it deliberately, so the health check exercises the shape agents receive. |
+| `memory_search_full` | `list[ScoredMemory]` — bodies inline | Callers that assert on a body or a fact payload: the eval suite, extraction's duplicate check, contradiction pairing. |
+| `memory_get(id)` | `Memory` | The single-record follow-up `more.fetch` names. |
+
+If klams-mind ever raises `ValidationError` out of a search, suspect
+this contract first: it is what a version skew between the two projects
+looks like. `smoke` says so in as many words.
 
 ## Development
 

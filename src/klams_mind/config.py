@@ -20,6 +20,8 @@ DEFAULT_CONFIG_PATH = Path("~/.config/klams-mind/config.toml")
 _ENV_OVERRIDES = {
     "KLAMS_URL": ("klams", "base_url"),
     "KLAMS_TOKEN": ("klams", "token"),
+    "KLAMS_EVAL_TOKEN": ("klams", "eval_token"),
+    "KLAMS_EVAL_AGENT_NAME": ("klams", "eval_agent_name"),
     "KLAMS_MIND_MODEL_URL": ("model", "base_url"),
     "KLAMS_MIND_MODEL_NAME": ("model", "name"),
     "KLAMS_MIND_MODEL_API_KEY": ("model", "api_key"),
@@ -29,6 +31,15 @@ _ENV_OVERRIDES = {
 class KlamsConfig(BaseModel):
     base_url: str = "http://kubs0:7777"
     token: str = ""
+    # klams-mind #735: a second, read-scoped grant whose
+    # `[[auth.tokens]].agent_name` is the eval suite's own, so
+    # `search_sample` can tell eval traffic from real agent queries.
+    # Empty means "no distinct identity" — the eval still runs, loudly.
+    eval_token: str = ""
+    # The `agent_name` the eval grant is expected to carry. klams-mind
+    # cannot read a grant's name back off its own token, so this is what
+    # the report stamps — keep it equal to the `[[auth.tokens]]` entry.
+    eval_agent_name: str = "klams-mind-eval"
 
 
 class ModelConfig(BaseModel):

@@ -33,6 +33,7 @@ _UNKNOWN = "unknown"
 _RUN_AT = re.compile(r"^- \*\*Run:\*\* (\S+)$", re.MULTILINE)
 _VERSION = re.compile(r"^- \*\*klams version:\*\* (\S+)$", re.MULTILINE)
 _SUITE = re.compile(r"^- \*\*Suite file:\*\* `([^`]+)` \(`(sha256:[0-9a-f]+)`\)$", re.MULTILINE)
+_CALLER = re.compile(r"^- \*\*Caller:\*\* (\S+)$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -41,13 +42,22 @@ class Provenance:
     suite_file: str
     suite_hash: str
     klams_version: str | None = None
+    # klams-mind #735: the klams grant this run presented, i.e. the
+    # `caller` its searches land under in `search_sample`. None on
+    # pre-#735 artifacts, and omitted from the rendering rather than
+    # written as "unknown" — an absent line is honest, a fake identity
+    # would corrupt exactly the mining this field exists to enable.
+    caller: str | None = None
 
     def markdown_lines(self) -> list[str]:
-        return [
+        lines = [
             f"- **Run:** {self.run_at}",
             f"- **klams version:** {self.klams_version or _UNKNOWN}",
             f"- **Suite file:** `{self.suite_file}` (`{self.suite_hash}`)",
         ]
+        if self.caller:
+            lines.append(f"- **Caller:** {self.caller}")
+        return lines
 
 
 def now_stamp() -> str:
@@ -75,9 +85,11 @@ def parse_provenance(text: str) -> Provenance | None:
         return None
     version_match = _VERSION.search(text)
     version = version_match.group(1) if version_match else _UNKNOWN
+    caller_match = _CALLER.search(text)
     return Provenance(
         run_at=run_at.group(1),
         suite_file=suite.group(1),
         suite_hash=suite.group(2),
         klams_version=None if version == _UNKNOWN else version,
+        caller=caller_match.group(1) if caller_match else None,
     )
