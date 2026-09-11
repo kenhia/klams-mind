@@ -59,7 +59,7 @@ def is_cited(evidence: str, window: str) -> bool:
 
 async def find_duplicate(client: KlamsClient, text: str) -> str | None:
     """Return the id of an existing memory that already says this, if any."""
-    hits = await client.memory_search(text, kinds=["knowledge"], top_k=5)
+    hits = await client.memory_search_full(text, kinds=["knowledge"], top_k=5)
     norm = _normalize(text)
     for h in hits:
         m = h.memory

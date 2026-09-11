@@ -41,7 +41,9 @@ async def find_candidate_pairs(
     pairs: dict[frozenset[str], CandidatePair] = {}
     for seed in seeds:
         # +1 so the seed itself (usually its own top hit) doesn't cost a slot.
-        hits = await client.memory_search(fact_text(seed), kinds=["fact"], top_k=neighbours + 1)
+        hits = await client.memory_search_full(
+            fact_text(seed), kinds=["fact"], top_k=neighbours + 1
+        )
         for hit in hits:
             other = hit.memory
             if not isinstance(other, FactMemory) or other.id == seed.id:

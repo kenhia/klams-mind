@@ -1,11 +1,26 @@
 # klams-mind config — copy to ~/.config/klams-mind/config.toml
 # (or point KLAMS_MIND_CONFIG at it). Every key is optional; defaults
 # target the homelab. Env overrides: KLAMS_URL, KLAMS_TOKEN,
-# KLAMS_MIND_MODEL_URL, KLAMS_MIND_MODEL_NAME, KLAMS_MIND_MODEL_API_KEY.
+# KLAMS_EVAL_TOKEN, KLAMS_EVAL_AGENT_NAME, KLAMS_MIND_MODEL_URL,
+# KLAMS_MIND_MODEL_NAME, KLAMS_MIND_MODEL_API_KEY.
 
 [klams]
 base_url = "http://kubs0:7777"
+# On kubs0 itself use http://localhost:7777 — the name `kubs0` resolves
+# to 127.0.1.1, while klams binds 127.0.0.1 and the tailnet address.
 token = "" # scoped klams-mind token — set here or via KLAMS_TOKEN, never commit
+
+# A second, READ-scoped grant used only by `eval run`, so klams logs eval
+# searches under their own `caller` and mining `search_sample` for new
+# eval queries cannot feed the suite its own golden queries (#735).
+# klams reads `caller` from the token's [[auth.tokens]].agent_name, not
+# from register_author — so this must be a distinct grant, and that
+# grant must set `agent_name` explicitly (klams only *requires* it for
+# manage/admin grants, so a read grant without one silently falls back
+# to the system author and defeats the whole point).
+# Empty is fine: the eval still runs, and warns.
+eval_token = ""
+eval_agent_name = "klams-mind-eval" # must match the grant's agent_name
 
 [model]
 base_url = "http://kai:8000/v1" # OpenAI-compatible (kvllm)

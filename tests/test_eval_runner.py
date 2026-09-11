@@ -114,7 +114,12 @@ async def test_klams_retriever_maps_scored_knowledge_and_fact() -> None:
 
     items = await retr.search("kvllm", top_k=5)
 
-    assert caller.calls[0] == ("memory_search", {"query": "kvllm", "top_k": 5})
+    # klams 046: the eval harness is the documented `full` caller — checks
+    # assert on bodies, and a 320-char snippet is not a body.
+    assert caller.calls[0] == (
+        "memory_search",
+        {"query": "kvllm", "top_k": 5, "full": True},
+    )
     know, fact = items
     assert know.content == "kvllm serves models on kai:8000"
     assert know.source == "/home/ken/src/ai/kvllm/README.md"

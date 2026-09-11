@@ -147,6 +147,9 @@ async def test_run_eval_stamps_the_klams_version_and_suite_digest(tmp_path: Path
         suite_file="suite.toml",
         suite_hash=suite_digest(path),
         klams_version="0.1.26",
+        # #735: with no eval grant configured this run is the main
+        # identity, and the report says so rather than staying silent.
+        caller="klams-mind",
     )
 
 
