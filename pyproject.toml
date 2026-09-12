@@ -29,7 +29,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-markers = ["live: hits live homelab services (skipped unless KLAMS_URL/KLAMS_TOKEN are set)"]
+markers = ["live: hits live homelab services (skipped unless KLAMS_URL is set)"]
 
 [build-system]
 requires = ["uv_build>=0.10.9,<0.11.0"]

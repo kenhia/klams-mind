@@ -49,10 +49,6 @@ contradict_app = typer.Typer(help="Find facts that contradict in meaning; propos
 app.add_typer(contradict_app, name="contradict")
 
 
-# The `agent_name` klams-mind registers and its main grant carries.
-_MAIN_AGENT_NAME = "klams-mind"
-
-
 class SmokeError(Exception):
     def __init__(self, step: str, cause: Exception) -> None:
         super().__init__(f"step '{step}' failed: {cause}")
@@ -88,7 +84,7 @@ async def run_smoke(
 
             step = "register author"
             author = await client.register_author(
-                agent_name=_MAIN_AGENT_NAME,
+                agent_name=cfg.klams.agent_name,
                 model=model_name,
                 client_app="klams-mind",
                 client_version=__version__,
@@ -169,7 +165,11 @@ def diagnose(step: str, exc: BaseException, cfg: Config, *, host: str | None = N
     if isinstance(leaf, httpx.HTTPStatusError):
         code = leaf.response.status_code
         if code in (401, 403):
-            return f"KLAMS_TOKEN rejected by klams at {url} (HTTP {code})"
+            return (
+                f"klams at {url} rejected the identity "
+                f"'{cfg.klams.agent_name}' (HTTP {code}) — it needs an "
+                "[[auth.identities]] row in klams.toml"
+            )
         return f"klams at {url} returned HTTP {code}"
 
     if isinstance(leaf, ValidationError):
@@ -179,7 +179,10 @@ def diagnose(step: str, exc: BaseException, cfg: Config, *, host: str | None = N
             f"klams' version ({leaf.error_count()} validation error(s))"
         )
 
-    return f"check klams ({cfg.klams.base_url}), kvllm ({cfg.model.base_url}), and KLAMS_TOKEN"
+    return (
+        f"check klams ({cfg.klams.base_url}), kvllm ({cfg.model.base_url}), "
+        f"and the X-Homelab-Agent identity ({cfg.klams.agent_name})"
+    )
 
 
 def _print_human(report: dict[str, Any]) -> None:
@@ -255,11 +258,13 @@ async def run_eval(
 ) -> Report:
     """Run a suite against live klams retrieval and aggregate a report.
 
-    #735: the run presents the eval-scoped grant when one is configured,
-    so its searches land in `search_sample` under their own `caller` and
-    mining can exclude them.
+    #735: the run declares the eval-scoped identity when one is
+    configured, so its searches land in `search_sample` under their own
+    `caller` and mining can exclude them. The report stamps whatever
+    identity actually went on the wire — `eval run` is where the "you
+    have no distinct one" warning lives.
     """
-    scoped, distinct = eval_klams_config(cfg.klams)
+    scoped, _ = eval_klams_config(cfg.klams)
     async with connect(scoped) as client:
         version = await _klams_version(client)
         retriever: Retriever = retriever_factory(client)
@@ -269,7 +274,7 @@ async def run_eval(
         suite_file=suite_path.name,
         suite_hash=suite_digest(suite_path),
         klams_version=version,
-        caller=cfg.klams.eval_agent_name if distinct else _MAIN_AGENT_NAME,
+        caller=scoped.agent_name,
     )
     return build_report(suite.name, results, provenance=provenance)
 
@@ -302,13 +307,15 @@ def eval_run(
     starts passing is reported prominently but does not fail the run.
     """
     cfg = load_config(path=config)
-    if not cfg.klams.eval_token:
+    _, distinct = eval_klams_config(cfg.klams)
+    if not distinct:
         # #735: not fatal, but it must not be silent — this is the state
         # that made 75% of `search_sample` the suite's own queries.
         typer.echo(
-            "eval: no KLAMS_EVAL_TOKEN — this run's searches will be logged as "
-            f"caller '{_MAIN_AGENT_NAME}', indistinguishable from real agent "
-            "queries in klams' search_sample (#735)",
+            "eval: no distinct eval identity (set KLAMS_EVAL_AGENT_NAME) — this "
+            f"run's searches will be logged as caller '{cfg.klams.agent_name}', "
+            "indistinguishable from real agent queries in klams' search_sample "
+            "(#735)",
             err=True,
         )
     try:
@@ -330,7 +337,7 @@ def eval_run(
         if debug:
             raise
         typer.echo(f"eval: retrieval failed: {exc}", err=True)
-        typer.echo("check klams (kubs0:7777) and KLAMS_TOKEN", err=True)
+        typer.echo("check klams (kubs0:7777) and the X-Homelab-Agent identity", err=True)
         raise typer.Exit(1) from exc
 
     if out is not None:
@@ -368,7 +375,7 @@ async def run_extract(
         author_id: str | None = None
         if apply:
             author = await client.register_author(
-                agent_name=_MAIN_AGENT_NAME,
+                agent_name=cfg.klams.agent_name,
                 model=model_name,
                 client_app="klams-mind",
                 client_version=__version__,
@@ -421,7 +428,10 @@ def extract_run(
         if debug:
             raise
         typer.echo(f"extract: failed: {exc}", err=True)
-        typer.echo("check klams (kubs0:7777), kvllm (kai:8000), and KLAMS_TOKEN", err=True)
+        typer.echo(
+            "check klams (kubs0:7777), kvllm (kai:8000), and the X-Homelab-Agent identity",
+            err=True,
+        )
         raise typer.Exit(1) from exc
 
     markdown = extraction_to_markdown(result)
@@ -453,7 +463,7 @@ async def run_contradict(
         author_id: str | None = None
         if apply:
             author = await client.register_author(
-                agent_name=_MAIN_AGENT_NAME,
+                agent_name=cfg.klams.agent_name,
                 model=model_name,
                 client_app="klams-mind",
                 client_version=__version__,
@@ -500,7 +510,10 @@ def contradict_run(
         if debug:
             raise
         typer.echo(f"contradict: failed: {exc}", err=True)
-        typer.echo("check klams (kubs0:7777), kvllm (kai:8000), and KLAMS_TOKEN", err=True)
+        typer.echo(
+            "check klams (kubs0:7777), kvllm (kai:8000), and the X-Homelab-Agent identity",
+            err=True,
+        )
         raise typer.Exit(1) from exc
 
     markdown = contradict_to_markdown(result)

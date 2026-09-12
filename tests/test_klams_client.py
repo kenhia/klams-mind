@@ -3,11 +3,12 @@
 Fixtures are recorded from the live service / the klams source contract
 (klams repo `crates/klams-mcp/src/tools/`); the MCP transport is faked
 by injecting a tool-caller. The live round-trip test at the bottom is
-marked `live` and skipped unless KLAMS_URL and KLAMS_TOKEN are set.
+marked `live` and skipped unless KLAMS_URL is set.
 """
 
 import json
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
 
@@ -100,9 +101,34 @@ def make_client(
     caller: FakeToolCaller | None = None,
     handler: httpx.MockTransport | None = None,
 ) -> KlamsClient:
-    cfg = KlamsConfig(base_url="http://kubs0:7777", token="test-token")
+    cfg = KlamsConfig(base_url="http://kubs0:7777")
     http = httpx.AsyncClient(transport=handler) if handler else None
     return KlamsClient(cfg, tool_caller=caller, http=http)
+
+
+def _capture(seen: dict[str, Any]) -> Any:
+    """A `streamablehttp_client` stand-in that records what it was handed."""
+
+    @asynccontextmanager
+    async def fake(url: str, headers: dict[str, str] | None = None) -> Any:
+        seen["url"] = url
+        seen["headers"] = headers
+        yield (None, None, None)
+
+    return fake
+
+
+class _FakeSession:
+    """A `ClientSession` stand-in: `connect` only initializes it."""
+
+    def __init__(self, *_args: Any) -> None: ...
+
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, *_exc: Any) -> None: ...
+
+    async def initialize(self) -> None: ...
 
 
 # --- healthz ---------------------------------------------------------------
@@ -419,16 +445,60 @@ async def test_tool_error_raises_klams_error_with_code() -> None:
     assert "non-empty" in str(exc.value)
 
 
+# --- the declared identity on the wire (sprint 010, korg:2423) --------------
+
+
+async def test_connect_declares_the_agent_name_as_a_header(monkeypatch: Any) -> None:
+    """klams keys `[[auth.identities]]` off `X-Homelab-Agent`, so the name
+    has to reach the transport — a config field nobody sends is the bug."""
+    seen: dict[str, Any] = {}
+
+    monkeypatch.setattr("klams_mind.klams.streamablehttp_client", _capture(seen))
+    monkeypatch.setattr("klams_mind.klams.ClientSession", _FakeSession)
+
+    async with connect(KlamsConfig(base_url="http://k:7777", agent_name="klams-mind-eval")):
+        pass
+
+    assert seen["url"] == "http://k:7777/mcp"
+    assert seen["headers"] == {"X-Homelab-Agent": "klams-mind-eval"}
+
+
+async def test_connect_sends_no_authorization_header(monkeypatch: Any) -> None:
+    """Sprint 010: the bearer path is gone, not merely unused."""
+    seen: dict[str, Any] = {}
+
+    monkeypatch.setattr("klams_mind.klams.streamablehttp_client", _capture(seen))
+    monkeypatch.setattr("klams_mind.klams.ClientSession", _FakeSession)
+
+    async with connect(KlamsConfig()):
+        pass
+
+    assert "Authorization" not in (seen["headers"] or {})
+
+
+async def test_connect_sends_no_header_when_no_identity_is_configured(
+    monkeypatch: Any,
+) -> None:
+    """An empty name is a config error; declaring "" would be a lie klams
+    404s on anyway. Send nothing and let klams answer 401 honestly."""
+    seen: dict[str, Any] = {}
+
+    monkeypatch.setattr("klams_mind.klams.streamablehttp_client", _capture(seen))
+    monkeypatch.setattr("klams_mind.klams.ClientSession", _FakeSession)
+
+    async with connect(KlamsConfig(agent_name="")):
+        pass
+
+    assert seen["headers"] is None
+
+
 # --- live round-trip --------------------------------------------------------
 
 
 @pytest.mark.live
-@pytest.mark.skipif(
-    not (os.environ.get("KLAMS_URL") and os.environ.get("KLAMS_TOKEN")),
-    reason="KLAMS_URL/KLAMS_TOKEN not set",
-)
+@pytest.mark.skipif(not os.environ.get("KLAMS_URL"), reason="KLAMS_URL not set")
 async def test_live_round_trip() -> None:
-    cfg = KlamsConfig(base_url=os.environ["KLAMS_URL"], token=os.environ["KLAMS_TOKEN"])
+    cfg = KlamsConfig(base_url=os.environ["KLAMS_URL"])
     async with connect(cfg) as client:
         snap = await client.healthz()
         assert snap.status in {"Ok", "Degraded"}

@@ -7,14 +7,16 @@ session-extraction searches. The log exists to mine *real* agent queries
 for eval growth, so mining it naively closes a feedback loop: the suite
 harvests its own queries back into itself.
 
-`search_sample`'s `caller` comes from the klams **token's** grant
-(`[[auth.tokens]].agent_name`), not from `register_author` — verified in
-klams `crates/klams-types/src/auth.rs`. So the client cannot relabel
-itself; it can only present a *different token*. This is the klams-mind
-half: configure and use an eval-scoped token, record which identity ran,
-and say so loudly when there isn't one.
+`search_sample`'s `caller` is the caller's klams identity, not anything
+`register_author` says — verified in klams
+`crates/klams-types/src/auth.rs`. Sprint 010 (korg:2423) moved that
+identity from a bearer grant to a declared `X-Homelab-Agent` name, so
+the eval run now presents `klams-mind-eval` as a *name*: the row it
+matches in `[[auth.identities]]` is read-scoped, and nothing is minted.
 
-The grant itself is klams-side and is handed up — see the sprint doc.
+The mechanism changed; the contract did not. `eval_klams_config` still
+returns `(config, distinct)`, and `distinct=False` still means this
+run's rows will be indistinguishable from real agent queries.
 """
 
 from pathlib import Path
@@ -23,52 +25,62 @@ from klams_mind.config import Config, KlamsConfig, load_config
 from klams_mind.eval.provenance import Provenance, parse_provenance
 from klams_mind.eval.runner import eval_klams_config
 
-MAIN = "main-token-value"
-EVAL = "eval-token-value"
+MAIN = "klams-mind"
+EVAL = "klams-mind-eval"
 
 
 # --- config -----------------------------------------------------------------
 
 
-def test_eval_token_comes_from_the_environment() -> None:
-    cfg = load_config(path=Path("/nonexistent.toml"), env={"KLAMS_EVAL_TOKEN": EVAL})
-    assert cfg.klams.eval_token == EVAL
+def test_eval_agent_name_comes_from_the_environment() -> None:
+    cfg = load_config(path=Path("/nonexistent.toml"), env={"KLAMS_EVAL_AGENT_NAME": "other-eval"})
+    assert cfg.klams.eval_agent_name == "other-eval"
 
 
-def test_eval_token_defaults_to_empty_not_to_the_main_token() -> None:
-    """Silently reusing the main token is the bug #735 is about."""
-    cfg = load_config(path=Path("/nonexistent.toml"), env={"KLAMS_TOKEN": MAIN})
-    assert cfg.klams.token == MAIN
-    assert cfg.klams.eval_token == ""
+def test_eval_agent_name_defaults_distinct_from_the_main_name() -> None:
+    """Silently reusing the main identity is the bug #735 is about."""
+    cfg = load_config(path=Path("/nonexistent.toml"), env={})
+    assert cfg.klams.agent_name == MAIN
+    assert cfg.klams.eval_agent_name == EVAL
 
 
 # --- the swap ---------------------------------------------------------------
 
 
-def test_eval_config_swaps_in_the_eval_token() -> None:
-    cfg = Config(klams=KlamsConfig(base_url="http://k:7777", token=MAIN, eval_token=EVAL))
+def test_eval_config_swaps_in_the_eval_agent_name() -> None:
+    cfg = Config(klams=KlamsConfig(base_url="http://k:7777"))
 
     scoped, distinct = eval_klams_config(cfg.klams)
 
-    assert scoped.token == EVAL
-    assert scoped.base_url == "http://k:7777"  # same service, different grant
+    assert scoped.agent_name == EVAL
+    assert scoped.base_url == "http://k:7777"  # same service, different identity
     assert distinct is True
 
 
-def test_eval_config_falls_back_to_the_main_token_and_says_it_is_not_distinct() -> None:
+def test_an_empty_eval_name_falls_back_and_says_it_is_not_distinct() -> None:
     """Falling back must still work — an eval you cannot run measures nothing."""
-    cfg = Config(klams=KlamsConfig(token=MAIN))
+    cfg = Config(klams=KlamsConfig(eval_agent_name=""))
 
     scoped, distinct = eval_klams_config(cfg.klams)
 
-    assert scoped.token == MAIN
+    assert scoped.agent_name == MAIN
+    assert distinct is False
+
+
+def test_an_eval_name_equal_to_the_main_name_is_not_distinct() -> None:
+    """The indistinguishable case #735 exists to catch, spelled as a name."""
+    cfg = Config(klams=KlamsConfig(eval_agent_name=MAIN))
+
+    scoped, distinct = eval_klams_config(cfg.klams)
+
+    assert scoped.agent_name == MAIN
     assert distinct is False
 
 
 def test_the_swap_does_not_mutate_the_original_config() -> None:
-    klams = KlamsConfig(token=MAIN, eval_token=EVAL)
+    klams = KlamsConfig()
     eval_klams_config(klams)
-    assert klams.token == MAIN
+    assert klams.agent_name == MAIN
 
 
 # --- provenance -------------------------------------------------------------

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from klams_mind.cli import app, run_eval
-from klams_mind.config import Config
+from klams_mind.config import Config, KlamsConfig
 from klams_mind.eval.checks import RetrievedItem
 from klams_mind.eval.provenance import Provenance, suite_digest
 from klams_mind.eval.report import Report
@@ -147,10 +147,34 @@ async def test_run_eval_stamps_the_klams_version_and_suite_digest(tmp_path: Path
         suite_file="suite.toml",
         suite_hash=suite_digest(path),
         klams_version="0.1.26",
-        # #735: with no eval grant configured this run is the main
-        # identity, and the report says so rather than staying silent.
-        caller="klams-mind",
+        # #735: the report stamps the identity the run actually
+        # declared. Sprint 010 made that identity a name with a default,
+        # so a bare `Config()` is now the *distinct* eval identity —
+        # before, with no token minted, it fell back to the main one.
+        caller="klams-mind-eval",
     )
+
+
+async def test_run_eval_stamps_the_main_identity_when_the_eval_one_is_disabled(
+    tmp_path: Path,
+) -> None:
+    """Opting out is now what costs a config line, not opting in."""
+    path = write_suite(tmp_path)
+
+    @asynccontextmanager
+    async def fake_connect(cfg):  # type: ignore[no-untyped-def]
+        yield _HealthyClient()
+
+    report = await run_eval(
+        load_suite(path),
+        Config(klams=KlamsConfig(eval_agent_name="")),
+        suite_path=path,
+        connect=fake_connect,
+        retriever_factory=lambda _c: _Retr([]),
+        now=lambda: "2026-07-26T04:10:27Z",
+    )
+    assert report.provenance is not None
+    assert report.provenance.caller == "klams-mind"
 
 
 async def test_run_eval_survives_an_unreadable_healthz(tmp_path: Path) -> None:

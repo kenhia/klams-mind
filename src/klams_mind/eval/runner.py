@@ -21,20 +21,23 @@ from klams_mind.klams import KlamsClient, ScoredMemory
 def eval_klams_config(klams: KlamsConfig) -> tuple[KlamsConfig, bool]:
     """The klams config an eval run should use, and whether it is distinct.
 
-    klams-mind #735: `search_sample`'s `caller` is the token grant's
-    `agent_name`, so presenting a second, eval-scoped token is the only
-    way a client can make its eval traffic distinguishable —
-    `register_author` does not touch it. Returns `(config, distinct)`;
-    `distinct=False` means the run will land in `search_sample`
-    indistinguishable from real agent queries, and mining it will feed
-    the suite its own golden queries.
+    klams-mind #735: `search_sample`'s `caller` is the caller's klams
+    identity, so declaring a second, eval-scoped one is the only way a
+    client can make its eval traffic distinguishable — `register_author`
+    does not touch it. Sprint 010 (korg:2423) made that identity a
+    declared `X-Homelab-Agent` name matched against a read-scoped
+    `[[auth.identities]]` row, so the swap is a name, not a token.
+
+    Returns `(config, distinct)`; `distinct=False` means the run will
+    land in `search_sample` indistinguishable from real agent queries,
+    and mining it will feed the suite its own golden queries.
 
     Falling back is deliberate rather than fatal: an eval that refuses to
     run measures nothing, which is worse than an eval whose rows need a
     date bracket to mine.
     """
-    if klams.eval_token:
-        return klams.model_copy(update={"token": klams.eval_token}), True
+    if klams.eval_agent_name and klams.eval_agent_name != klams.agent_name:
+        return klams.model_copy(update={"agent_name": klams.eval_agent_name}), True
     return klams.model_copy(), False
 
 
