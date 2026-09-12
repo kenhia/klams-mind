@@ -416,8 +416,14 @@ class KlamsClient:
 
 @asynccontextmanager
 async def connect(cfg: KlamsConfig) -> AsyncIterator[KlamsClient]:
-    """Open an authenticated MCP session against `{base_url}/mcp`."""
-    headers = {"Authorization": f"Bearer {cfg.token}"} if cfg.token else None
+    """Open an authenticated MCP session against `{base_url}/mcp`.
+
+    Sprint 010 (korg:2423): klams authenticates a declared identity, so
+    what goes on the wire is a name rather than a bearer token. An empty
+    `agent_name` sends no header at all — klams answers 401 either way,
+    and declaring "" would be a claim rather than an omission.
+    """
+    headers = {"X-Homelab-Agent": cfg.agent_name} if cfg.agent_name else None
     async with (
         streamablehttp_client(f"{cfg.base_url}/mcp", headers=headers) as (
             read,

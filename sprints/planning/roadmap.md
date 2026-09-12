@@ -2,9 +2,10 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-09-10 (001–009 shipped; 008 went to the kprojects
-harness chore and 009 to an unplanned klams contract migration, so
-consolidation slid to 010. Queue was renumbered 005+
+**Date:** 2026-09-12 (001–010 shipped; 008 went to the kprojects
+harness chore, 009 to an unplanned klams contract migration and 010 to
+the homelab identity-header cutover, so consolidation slid to 011.
+Queue was renumbered 005+
 after the
 unplanned 003 client-lib and 004 scored-retrieval sprints consumed the
 numbers it had penciled in, and again at 007 when klams#676 was pulled
@@ -19,8 +20,8 @@ eval harness, prompt presets, retrieval lessons): klams repo
 
 klams-mind is the intelligence layer klams deliberately excludes from
 its core: extraction, semantic contradiction detection, consolidation,
-and retrieval evals. It is a **client** of klams (own scoped token +
-author identity) and consumes models through **OpenAI-compatible
+and retrieval evals. It is a **client** of klams (own declared
+identity — `X-Homelab-Agent`, no token since 010) and consumes models through **OpenAI-compatible
 endpoints** (vLLM via kvllm on kai; klams keeps embeddings local to
 kubs0). Orchestration is LangChain — this project is also the
 designated playground for learning it properly.
@@ -35,8 +36,8 @@ reads (`GET /v1/memories`) and `/healthz`. New agent capabilities
 klams grows for us (dissent proposal) arrive as MCP tools.
 
 Anything klams-mind needs klams to grow (dissent-proposal API, paging,
-tokens) is filed against klams sprint 015 "Companion enablement" — see
-that queue.
+identities) is filed against klams sprint 015 "Companion enablement" —
+see that queue.
 
 ## Sprint queue
 
@@ -78,7 +79,20 @@ the retrieval baseline stayed comparable; `KLAMS_EVAL_TOKEN` +
 diagnosis (#831). Rebaselined at klams 0.1.46 — 26/27, 0 regressions.
 See [009-consolidation/sprint.md](../009-consolidation/sprint.md).
 
-### 010 — Consolidation (next)
+### 010 — Identity headers, no klams token (shipped)
+
+Proposal korg:2423, slice 4 of homelab program korg:2440 ("Simplify
+homelab secrets"). klams stopped treating its bearer tokens as locks —
+they were name tags — and now authenticates a declared
+`X-Homelab-Agent` name against `[[auth.identities]]`. klams-mind
+followed: `token`/`eval_token` deleted, `agent_name`/`eval_agent_name`
+declared, and the eval identity became the default rather than
+something that had to be minted first. WI 2257 ("mint the eval grant
+and register it in krot") dissolved into a config row that already
+exists. See
+[010-identity-headers/sprint.md](../010-identity-headers/sprint.md).
+
+### 011 — Consolidation (next)
 
 Decay-informed maintenance passes: merge near-duplicates, summarize
 stale clusters, propose prunes. Propose-first like extraction; uses

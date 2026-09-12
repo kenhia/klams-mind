@@ -51,8 +51,8 @@ endpoint. Exit 0 means all four legs work.
 
 When a leg fails, `smoke` names the leaf cause and what to do about it
 rather than the `ExceptionGroup` the MCP client wrapped it in — klams
-unreachable (with the URL it actually tried), `KLAMS_TOKEN` rejected
-(with the HTTP status), or a response it could not parse (which is what
+unreachable (with the URL it actually tried), the declared identity
+rejected (named, with the HTTP status), or a response it could not parse (which is what
 klams/klams-mind contract drift looks like). No `--debug` needed. If the
 URL's host is this machine, it also points at the loopback override,
 because the homelab default `http://kubs0:7777` does not work *on*
@@ -84,14 +84,16 @@ bulk (eval harnesses, exports)". That is deliberate: half these checks
 assert on a body, and the default compact response carries a ≤320-char
 match-window snippet instead. See "The klams search contract" below.
 
-**Eval-run identity.** Set `KLAMS_EVAL_TOKEN` to a second, read-scoped
-klams grant whose `[[auth.tokens]].agent_name` is the eval suite's own
-(`klams-mind-eval` by default; override with `KLAMS_EVAL_AGENT_NAME`).
-klams logs a search's `caller` from the *token's* grant, not from
-`register_author`, so a distinct token is the only way to keep eval
+**Eval-run identity.** An `eval run` declares `klams-mind-eval` instead
+of `klams-mind` (override with `KLAMS_EVAL_AGENT_NAME`), matching a
+second, **read-scoped** `[[auth.identities]]` row in klams. klams logs a
+search's `caller` from the declared identity, not from
+`register_author`, so a distinct name is the only way to keep eval
 traffic out of the pool that gets mined for new eval queries — otherwise
-the suite is fed its own golden queries. The run works without one and
-says so on stderr; every report stamps the `Caller` it ran as.
+the suite is fed its own golden queries. It is on by default because it
+costs nothing: opting *out* is what takes a config line
+(`eval_agent_name = ""`), and a run that has opted out says so on
+stderr. Every report stamps the `Caller` it ran as.
 
 Exit code is **0** if every check passes, **1** if any check fails, **2**
 for a bad suite file — so CI can gate on it. Reports list every hit with
@@ -171,12 +173,16 @@ Defaults target the homelab (klams at `kubs0:7777`, kvllm at
 `kai:8000/v1`, model name auto-discovered from `/models`). To override,
 copy [config.example.toml](config.example.toml) to
 `~/.config/klams-mind/config.toml` (or point `KLAMS_MIND_CONFIG` at a
-file). Environment variables beat the file: `KLAMS_URL`, `KLAMS_TOKEN`,
-`KLAMS_EVAL_TOKEN`, `KLAMS_EVAL_AGENT_NAME`, `KLAMS_MIND_MODEL_URL`,
-`KLAMS_MIND_MODEL_NAME`, `KLAMS_MIND_MODEL_API_KEY`. A `./.env` is auto-loaded (real environment
-variables still win), so dropping `KLAMS_TOKEN=...` in `.env` is enough
-for live runs — `.env` is gitignored; keep the token out of the repo.
-The klams token is required for anything beyond `/healthz`.
+file). Environment variables beat the file: `KLAMS_URL`,
+`KLAMS_AGENT_NAME`, `KLAMS_EVAL_AGENT_NAME`, `KLAMS_MIND_MODEL_URL`,
+`KLAMS_MIND_MODEL_NAME`, `KLAMS_MIND_MODEL_API_KEY`. A `./.env` is
+auto-loaded (real environment variables still win), and is gitignored.
+
+**klams-mind holds no klams credential.** It authenticates by declaring
+who it is — `X-Homelab-Agent: klams-mind` — and klams matches that name
+against an `[[auth.identities]]` row that carries the scopes. A name
+klams does not know is a 401; there is no token to leak, rotate, or
+register. (Homelab program korg:2440, sprint 010.)
 
 Note: klams exposes `register_author` / `memory_search` / `memory_add`
 only as MCP tools (Streamable HTTP at `{KLAMS_URL}/mcp`), not REST —
@@ -216,7 +222,7 @@ just check       # alias for `gate`, the name the kproject harness uses
 just smoke       # check the live klams + kvllm plumbing (not in the gate)
 
 # live tests (skipped otherwise) need the real service:
-KLAMS_URL=http://localhost:7777 KLAMS_TOKEN=... uv run pytest -m live
+KLAMS_URL=http://localhost:7777 uv run pytest -m live
 ```
 
 Workflow, principles, and the sprint convention are in

@@ -1,8 +1,9 @@
 """Configuration: homelab defaults ← TOML file ← environment overrides.
 
 Default config path is ``~/.config/klams-mind/config.toml`` (override
-with ``KLAMS_MIND_CONFIG``). Secrets (klams token) live there or in the
-environment — never in the repo.
+with ``KLAMS_MIND_CONFIG``). As of sprint 010 klams-mind holds no klams
+secret at all: it declares an identity name. The only secret left is the
+model endpoint's API key, which kvllm ignores.
 """
 
 import os
@@ -15,12 +16,11 @@ from pydantic import BaseModel
 
 DEFAULT_CONFIG_PATH = Path("~/.config/klams-mind/config.toml")
 
-# Env var → (section, field). KLAMS_URL/KLAMS_TOKEN match what the
-# klams tooling already uses; the rest are klams-mind's own.
+# Env var → (section, field). KLAMS_URL matches what the klams tooling
+# already uses; the rest are klams-mind's own.
 _ENV_OVERRIDES = {
     "KLAMS_URL": ("klams", "base_url"),
-    "KLAMS_TOKEN": ("klams", "token"),
-    "KLAMS_EVAL_TOKEN": ("klams", "eval_token"),
+    "KLAMS_AGENT_NAME": ("klams", "agent_name"),
     "KLAMS_EVAL_AGENT_NAME": ("klams", "eval_agent_name"),
     "KLAMS_MIND_MODEL_URL": ("model", "base_url"),
     "KLAMS_MIND_MODEL_NAME": ("model", "name"),
@@ -30,15 +30,15 @@ _ENV_OVERRIDES = {
 
 class KlamsConfig(BaseModel):
     base_url: str = "http://kubs0:7777"
-    token: str = ""
-    # klams-mind #735: a second, read-scoped grant whose
-    # `[[auth.tokens]].agent_name` is the eval suite's own, so
-    # `search_sample` can tell eval traffic from real agent queries.
-    # Empty means "no distinct identity" — the eval still runs, loudly.
-    eval_token: str = ""
-    # The `agent_name` the eval grant is expected to carry. klams-mind
-    # cannot read a grant's name back off its own token, so this is what
-    # the report stamps — keep it equal to the `[[auth.tokens]]` entry.
+    # Sprint 010 (korg:2423): the identity klams-mind declares in
+    # `X-Homelab-Agent`. klams matches it against `[[auth.identities]]`
+    # — the name *is* the credential, so there is no token to hold.
+    agent_name: str = "klams-mind"
+    # klams-mind #735: a second, read-scoped identity for the eval
+    # suite, so `search_sample`'s `caller` tells eval traffic from real
+    # agent queries. Empty (or equal to `agent_name`) means "no distinct
+    # identity" — the eval still runs, loudly. It is also what the
+    # report stamps, so keep it equal to the `[[auth.identities]]` row.
     eval_agent_name: str = "klams-mind-eval"
 
 
@@ -65,7 +65,7 @@ def load_config(
     fine.
 
     On the real-run path (``env`` unset) a ``./.env`` is auto-loaded so
-    live runs pick up ``KLAMS_TOKEN`` without exporting it; the real
+    live runs pick up local overrides without exporting them; the real
     environment still wins over ``.env``. Tests that inject ``env`` stay
     isolated — pass ``dotenv_path`` explicitly to exercise ``.env``.
     """

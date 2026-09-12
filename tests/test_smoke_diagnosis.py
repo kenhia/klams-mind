@@ -2,14 +2,16 @@
 
 `smoke` used to report every klams failure identically — "step 'connect
 to klams MCP' failed: unhandled errors in a TaskGroup" — with a hint
-that named the token first, so a pure reachability failure read as a
-credential problem. Worse, the MCP client raises an `ExceptionGroup`, so
+that named the credential first, so a pure reachability failure read as
+a credential problem. Worse, the MCP client raises an `ExceptionGroup`, so
 the useful leaf did not surface even *with* `--debug` (rich renders the
 `SmokeError` chain and swallows the group).
 
 The exception shapes below are recorded from live probes against
-kubs0:7777 on 2026-09-10 — a bogus token, a refused port, and a
-nonexistent host.
+kubs0:7777 on 2026-09-10 — a rejected credential, a refused port, and a
+nonexistent host. Sprint 010 changed what the credential *is* (a
+declared `X-Homelab-Agent` name, not a bearer token); the shapes and the
+diagnoses are otherwise unchanged.
 """
 
 import httpx
@@ -20,7 +22,7 @@ from klams_mind.cli import diagnose, leaf_cause
 from klams_mind.config import Config, KlamsConfig, ModelConfig
 
 CFG = Config(
-    klams=KlamsConfig(base_url="http://kubs0:7777", token="t"),
+    klams=KlamsConfig(base_url="http://kubs0:7777"),
     model=ModelConfig(base_url="https://kai:8000/v1"),
 )
 
@@ -62,7 +64,7 @@ def test_connect_error_says_unreachable_and_names_the_url() -> None:
 
     assert "unreachable" in hint
     assert "http://kubs0:7777" in hint
-    assert "KLAMS_TOKEN" not in hint  # the whole point of #831
+    assert "identity" not in hint  # the whole point of #831
 
 
 def test_connect_timeout_is_also_unreachable() -> None:
@@ -71,20 +73,30 @@ def test_connect_timeout_is_also_unreachable() -> None:
 
 
 @pytest.mark.parametrize("code", [401, 403])
-def test_rejected_token_says_so_and_not_unreachable(code: int) -> None:
-    """The other acceptance criterion: bogus KLAMS_TOKEN -> token rejected."""
+def test_rejected_identity_says_so_and_not_unreachable(code: int) -> None:
+    """The other acceptance criterion: an identity klams will not accept."""
     hint = diagnose("connect to klams MCP", _group(_status(code)), CFG)
 
-    assert "KLAMS_TOKEN" in hint
+    assert "identity" in hint
+    assert "klams-mind" in hint  # names the one it declared
     assert str(code) in hint
     assert "unreachable" not in hint
 
 
-def test_other_http_status_reports_the_code_without_blaming_the_token() -> None:
+def test_the_rejection_hint_names_the_identity_actually_declared() -> None:
+    """A non-default name must not be diagnosed as the default one."""
+    cfg = Config(klams=KlamsConfig(base_url="http://kubs0:7777", agent_name="klams-mind-eval"))
+
+    hint = diagnose("memory search", _group(_status(401)), cfg)
+
+    assert "klams-mind-eval" in hint
+
+
+def test_other_http_status_reports_the_code_without_blaming_the_identity() -> None:
     hint = diagnose("klams healthz", _group(_status(503)), CFG)
 
     assert "503" in hint
-    assert "KLAMS_TOKEN" not in hint
+    assert "identity" not in hint
 
 
 def test_a_hostname_equal_to_this_host_suggests_the_loopback_override() -> None:
@@ -121,4 +133,4 @@ def test_an_unclassified_failure_keeps_the_general_hint() -> None:
     hint = diagnose("register author", _group(RuntimeError("odd")), CFG)
 
     assert "http://kubs0:7777" in hint
-    assert "KLAMS_TOKEN" in hint
+    assert "X-Homelab-Agent" in hint
