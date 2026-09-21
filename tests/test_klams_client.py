@@ -10,6 +10,7 @@ runs it, and an unreachable klams fails that gate rather than skipping.
 """
 
 import json
+import warnings
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
@@ -26,10 +27,12 @@ from klams_mind.klams import (
     FactMemory,
     KlamsClient,
     KlamsError,
+    KlamsVersionWarning,
     KnowledgeMemory,
     _fmt_version,
     connect,
     parse_version,
+    untested_version_note,
     version_warning,
 )
 
@@ -546,17 +549,18 @@ async def test_live_round_trip() -> None:
         fetched = await client.memory_get(str(added.id))
         assert fetched.id == added.id
 
-    # Last, deliberately (sprint 011 D-3): the contract assertions above
-    # have already passed, so this failing means only that the constant
-    # is stale — and it fails with the evidence in hand. Asserting the
-    # range *first* would report that the version moved and never say
-    # whether the contract still held, which is the useful half.
-    assert version_warning(snap.version) is None, (
-        f"the round-trip above passed against klams {snap.version}, but "
-        f"TESTED_KLAMS_MAX is {_fmt_version(TESTED_KLAMS_MAX)} — bump it "
-        f"to {snap.version} so `smoke` stops warning about a combination "
-        f"this gate has now proven"
-    )
+    # Last, and a WARNING rather than an assertion (sprint 011 D-3, as
+    # revised by the overseer). Everything above this line is the drift
+    # signal and fails hard. This is only the "nobody has re-proved it
+    # this far yet" note: klams ships often, and a tier that goes red on
+    # a patch bump carrying no contract change is a tier people learn to
+    # ignore — the exact failure #2249 exists to stop. It runs last so
+    # it can say the contract held, which is what makes it actionable.
+    note = untested_version_note(snap.version)
+    if note is not None:
+        # stacklevel=1 on purpose: inside an async test, 2 attributes the
+        # warning to asyncio's event loop rather than to this line.
+        warnings.warn(f"ACTION: {note}", KlamsVersionWarning, stacklevel=1)
 
 
 # --- contract version range (sprint 011) ------------------------------------
@@ -600,3 +604,50 @@ def test_unparseable_version_warns_rather_than_raising() -> None:
     warning = version_warning("who-knows")
     assert warning is not None
     assert "who-knows" in warning
+
+
+# --- the gate-live note: a warning, never a failure (overseer ruling) --------
+
+
+def test_untested_note_is_silent_inside_the_range() -> None:
+    assert untested_version_note(_fmt_version(TESTED_KLAMS_MAX)) is None
+    assert untested_version_note(_fmt_version(TESTED_KLAMS_MIN)) is None
+
+
+def test_untested_note_above_the_ceiling_says_the_contract_held() -> None:
+    """The whole point of running it last: an out-of-range answer here
+    means a stale constant, not drift, and the note must say so and
+    name the constant to move."""
+    note = untested_version_note("0.1.99")
+    assert note is not None
+    assert "contract holds" in note
+    assert "TESTED_KLAMS_MAX" in note
+    assert "(0, 1, 99)" in note
+    assert "src/klams_mind/klams.py" in note
+
+
+def test_untested_note_below_the_floor_names_the_other_constant() -> None:
+    note = untested_version_note("0.1.30")
+    assert note is not None
+    assert "TESTED_KLAMS_MIN" in note
+    assert "TESTED_KLAMS_MAX" not in note
+
+
+def test_untested_note_handles_an_uncomparable_version() -> None:
+    note = untested_version_note("0.1.53-rc1")
+    assert note is not None
+    assert "0.1.53-rc1" in note
+
+
+def test_klams_version_warning_is_a_warning_not_an_error() -> None:
+    """The overseer's ruling in one assertion: klams ships often, so a
+    version past the ceiling must not turn `gate-live` red. Only the
+    round-trip's contract assertions may do that."""
+    assert issubclass(KlamsVersionWarning, Warning)
+
+    with pytest.warns(KlamsVersionWarning, match="contract holds"):
+        warnings.warn(
+            f"ACTION: {untested_version_note('0.1.99')}",
+            KlamsVersionWarning,
+            stacklevel=1,
+        )

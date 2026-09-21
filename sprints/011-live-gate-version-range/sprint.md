@@ -110,16 +110,42 @@ The min is not decoration: below 0.1.46 the compact envelope does not
 exist, so an *old* klams breaks this client as surely as a new one.
 
 The max needs a maintenance story or it becomes the stale fixture again.
-The story is: **the live round-trip asserts it, last, after the
-substantive assertions have passed.** A newer klams therefore fails
-`gate-live` with the evidence already in hand — "the round-trip passed
-at 0.1.53; bump `TESTED_KLAMS_MAX`" — which is a one-line edit made with
-proof rather than a constant nobody revisits. Ordering matters: asserting
-the range *first* would tell you the version moved and never tell you
+The story is: **the live round-trip checks it, last, after the
+substantive assertions have passed.** Ordering matters: checking the
+range *first* would tell you the version moved and never tell you
 whether the contract still held.
 
 This is the one piece of the sprint that is a design call rather than a
-transcription of the proposal, and it is flagged for the overseer.
+transcription of the proposal, and it was flagged for the overseer.
+
+#### D-3 revised — the ceiling warns, it does not fail
+
+As first written, that check was an `assert`, so a newer klams turned
+`gate-live` red until someone bumped the constant. Flagged for a ruling
+in handoff korg:2999; **the overseer ruled it down to a warning**, and
+the reasoning is better than mine:
+
+> klams has shipped ~16 versions in the window this repo drifted; a gate
+> that goes red on every patch bump with no contract change is a gate
+> people learn to ignore, which is the failure 2249 exists to stop. What
+> must FAIL is the contract assertions themselves — those are the drift
+> signal; the ceiling is only the "nobody has re-proved this yet" note.
+
+That is the same argument 2249 makes, applied one level up: I had built
+a second thing people would learn to scroll past. The split is now
+explicit — **the round-trip's contract assertions fail hard; the ceiling
+emits `KlamsVersionWarning`** and the test still passes.
+
+Implementation: `untested_version_note()` in `klams.py` produces the
+`gate-live`-context message, separate from `version_warning()`'s
+smoke-context one. The two differ because the context is opposite —
+`gate-live` speaks *after* the round-trip passed, so it can say "the
+contract holds, only the constant is stale" and name the file and the
+literal to write. Five unit tests cover it, including one asserting
+`KlamsVersionWarning` is a `Warning` and not an error, so the ruling
+itself is pinned by the suite rather than by a comment.
+
+`smoke` was already advisory (D-4), so nothing changed there.
 
 ### D-4 — the warning is advisory in `smoke`, fatal in `gate-live`
 
@@ -166,21 +192,29 @@ about a combination this gate has now proven
 ```
 
 Every contract assertion — compact envelope, `full`, `memory_get` —
-passed against 0.1.52; only the ceiling was stale, and it failed with
-the evidence in hand. `TESTED_KLAMS_MAX` was raised to `(0, 1, 52)` as
-a proven claim rather than a guess, and `gate-live` went green. That is
-D-3 working on the day it was written, and it is the first time this
-repo has asserted anything about a klams newer than 0.1.46.
+passed against 0.1.52; only the ceiling was stale. `TESTED_KLAMS_MAX`
+was raised to `(0, 1, 52)` as a proven claim rather than a guess, and
+`gate-live` went green. It is the first time this repo has asserted
+anything about a klams newer than 0.1.46.
+
+(That first run failed, because the ceiling was an `assert` at the time.
+Under the revised D-3 the same situation is a passing run carrying a
+`KlamsVersionWarning` — re-verified by temporarily lowering the ceiling
+after the change: `1 passed, 2 warnings`, the note naming
+`TESTED_KLAMS_MAX`, `(0, 1, 52)` and the file to edit.)
 
 ### Verification
 
 | Check | Result |
 |---|---|
-| `just gate` | green — 189 passed, 1 deselected |
-| `just gate-live` (live klams 0.1.52, from kubs0) | green — 1 passed, 189 deselected |
+| `just gate` | green — 194 passed, 1 deselected |
+| `just gate-live` (live klams 0.1.52, from kubs0) | green — 1 passed, 194 deselected |
 | `just smoke` (live klams + kvllm on kai) | green, no warning (0.1.52 in range) |
-| warning path, end to end | forced by temporarily lowering the ceiling: the line appeared on **stderr** in both modes, `--json` stdout still parsed as JSON, exit 0 — then reverted |
+| smoke's warning path, end to end | forced by temporarily lowering the ceiling: the line appeared on **stderr** in both modes, `--json` stdout still parsed as JSON, exit 0 — then reverted |
+| `gate-live`'s warning path, end to end | same forcing, after the D-3 revision: `1 passed, 2 warnings`, attributed to the test line, naming the constant and the literal — then reverted |
 | `just --list` | both new/changed descriptions read correctly |
+
+Counts moved 189 → 194 with the five tests added for the revised D-3.
 
 ## Repaired in passing
 
@@ -211,7 +245,9 @@ filing them again would make the record worse:
 - **Its closing suggestion**, that klams carry a client-visible contract
   version or name klams-mind as a consumer in its release path. That is
   another repo's contract and therefore a decision this sprint cannot
-  make (Branch B) — raised in the wrap-up handoff for the overseer's
-  ruling rather than filed unilaterally as a klams work item.
+  make (Branch B) — raised in the wrap-up handoff rather than filed
+  unilaterally as a klams work item. The overseer ruled it **not filed
+  and not ruled here**: it is a klams design question, and it goes to
+  Ken as a suggestion in the program report.
 
 No cross-repo changes were made: everything landed inside klams-mind.

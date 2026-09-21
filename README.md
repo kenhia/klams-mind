@@ -229,10 +229,27 @@ TESTED_KLAMS_MAX
 The floor is not decoration: the compact envelope landed in klams
 0.1.46, so an *older* klams breaks this client as surely as a newer one.
 
-The ceiling is maintained by `just gate-live`, which asserts it after
-its contract assertions have passed — so a newer klams fails that gate
-saying "the round-trip passed at X; bump this", and the range can never
-quietly become a claim nobody re-checked.
+The ceiling is maintained by `just gate-live`, which checks it **last,
+after its contract assertions have passed, and warns rather than
+fails**:
+
+```
+ACTION: the live round-trip passed against klams 0.1.53: the contract
+holds, only the constant is stale. Bump TESTED_KLAMS_MAX to (0, 1, 53)
+in src/klams_mind/klams.py so `smoke` stops warning about a combination
+this gate has now proven
+```
+
+A warning and not a failure, deliberately. klams ships often — sixteen
+versions in the window this repo drifted — and a tier that goes red on
+every patch bump carrying no contract change is a tier people learn to
+ignore, which is the failure this whole mechanism exists to stop. **The
+contract assertions are the drift signal and they fail hard**; the
+ceiling is only the record of how far anyone has re-proved them.
+
+Running it last is what makes the warning actionable: it can say the
+contract still held, so an out-of-range answer means a stale constant
+rather than drift.
 
 ## Development
 
