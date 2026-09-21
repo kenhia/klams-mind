@@ -61,6 +61,72 @@ class HealthSnapshot(BaseModel):
     uptime_seconds: int
 
 
+# --- contract version range (#2249) ------------------------------------------
+
+# The klams versions this client's contract has actually been exercised
+# against. Every klams-facing unit test fakes the MCP transport, so the
+# suite validates klams-mind against klams-mind's own idea of the
+# contract; these two numbers are the part that refers to the world.
+#
+# The floor is not decoration. `memory_search`'s compact envelope
+# (`{hits, more}`) landed in klams 0.1.46 (klams sprint 046, #1178), so
+# an *older* klams breaks this client as surely as a newer one does.
+#
+# The ceiling is the newest klams `just gate-live` has round-tripped
+# against. It is asserted by the live test itself, last, after the
+# contract assertions have passed — so a newer klams fails `gate-live`
+# with the evidence in hand ("the round-trip passed at X; bump this")
+# rather than leaving a constant nobody revisits. Sprint 011 D-3.
+TESTED_KLAMS_MIN = (0, 1, 46)
+# Raised from 0.1.46 by `just gate-live` on kubs0, 2026-09-21: the
+# round-trip (compact envelope, `full`, `memory_get`) passed against
+# klams 0.1.52. Six versions of drift that nothing in this repo would
+# otherwise have reported.
+TESTED_KLAMS_MAX = (0, 1, 52)
+
+
+def parse_version(version: str) -> tuple[int, ...] | None:
+    """`"0.1.52"` → `(0, 1, 52)`, or None if it is not dotted integers."""
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return None
+
+
+def _fmt_version(version: tuple[int, ...]) -> str:
+    return ".".join(str(part) for part in version)
+
+
+def version_warning(version: str) -> str | None:
+    """One actionable line when klams is outside the tested range.
+
+    None when it is inside — the caller prints nothing. This turns the
+    failure klams-mind actually suffered (a bare `ValidationError` out
+    of a search, sixteen versions after the envelope changed) into a
+    sentence naming both versions before anything parses.
+    """
+    tested = f"{_fmt_version(TESTED_KLAMS_MIN)}-{_fmt_version(TESTED_KLAMS_MAX)}"
+    parsed = parse_version(version)
+    if parsed is None:
+        return (
+            f"klams reports version {version!r}, which this client cannot "
+            f"compare against the range it was tested on ({tested})"
+        )
+    if parsed < TESTED_KLAMS_MIN:
+        return (
+            f"klams is {version}, older than the {tested} this client was "
+            f"tested against — `memory_search`'s compact envelope landed in "
+            f"{_fmt_version(TESTED_KLAMS_MIN)}, so searches will not parse"
+        )
+    if parsed > TESTED_KLAMS_MAX:
+        return (
+            f"klams is {version}, newer than the {tested} this client was "
+            f"tested against — run `just gate-live` to check the contract, "
+            f"then bump TESTED_KLAMS_MAX"
+        )
+    return None
+
+
 # --- memories ----------------------------------------------------------------
 
 
