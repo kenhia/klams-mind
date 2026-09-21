@@ -69,7 +69,12 @@ TDD is mandatory for new code: write the failing test, make it pass,
 refactor green. Tests exist before or alongside the code they
 validate; coverage must not decrease. LLM-dependent paths get tested
 against recorded/faked responses by default; live-endpoint tests are
-marked and skipped when the endpoint is absent.
+marked `live` and **deselected** from the ordinary gate — not skipped
+inside it. A skip cannot fail, so a contract test guarded by a
+`skipif` reports success on a host where the service is unreachable,
+which is exactly how klams-mind missed sixteen klams versions of
+contract drift (#2249). They run in their own tier, where absence is
+a red gate.
 
 ### Code standards gate
 
@@ -86,6 +91,13 @@ uv run pytest
 
 This applies to existing code touched in passing, not just new code —
 no broken windows.
+
+The second tier is **`just gate-live`**, which runs the `live` tests
+against a real klams. It is not part of `just gate` and cannot be:
+klams is on kubs0 behind the tailnet, so no hosted runner reaches it.
+Run it where klams is reachable, and after either side deploys — it is
+this repo's only assertion about the real klams contract. See
+[README.md](README.md#two-test-tiers).
 
 ### Documentation is part of done
 

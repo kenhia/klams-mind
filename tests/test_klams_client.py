@@ -2,12 +2,15 @@
 
 Fixtures are recorded from the live service / the klams source contract
 (klams repo `crates/klams-mcp/src/tools/`); the MCP transport is faked
-by injecting a tool-caller. The live round-trip test at the bottom is
-marked `live` and skipped unless KLAMS_URL is set.
+by injecting a tool-caller. That is the gap #2249 measured — the suite
+validates klams-mind against klams-mind's own idea of the contract — so
+the round-trip test at the bottom is marked `live` and is the one thing
+here that refers to the world. `just gate` deselects it; `just gate-live`
+runs it, and an unreachable klams fails that gate rather than skipping.
 """
 
 import json
-import os
+import warnings
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
@@ -16,14 +19,21 @@ import httpx
 import pytest
 from mcp.types import CallToolResult, TextContent
 
-from klams_mind.config import KlamsConfig
+from klams_mind.config import KlamsConfig, load_config
 from klams_mind.klams import (
+    TESTED_KLAMS_MAX,
+    TESTED_KLAMS_MIN,
     DissentProposed,
     FactMemory,
     KlamsClient,
     KlamsError,
+    KlamsVersionWarning,
     KnowledgeMemory,
+    _fmt_version,
     connect,
+    parse_version,
+    untested_version_note,
+    version_warning,
 )
 
 # Recorded 2026-07-06 from live kubs0:7777/healthz.
@@ -496,9 +506,18 @@ async def test_connect_sends_no_header_when_no_identity_is_configured(
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.environ.get("KLAMS_URL"), reason="KLAMS_URL not set")
 async def test_live_round_trip() -> None:
-    cfg = KlamsConfig(base_url=os.environ["KLAMS_URL"])
+    """The contract tier: `just gate-live`, never `just gate`.
+
+    No `skipif` (sprint 011 D-1) — `addopts` deselects this from the
+    ordinary gate, so when it runs it runs, and an unreachable klams is
+    a red gate rather than a green skip.
+
+    The URL comes from the repo's own config chain (D-2), so a plain
+    checkout on kubs0 works off its `.env` with nothing exported, and
+    `KLAMS_URL=…` still wins because the real environment beats `.env`.
+    """
+    cfg = load_config().klams
     async with connect(cfg) as client:
         snap = await client.healthz()
         assert snap.status in {"Ok", "Degraded"}
@@ -529,3 +548,106 @@ async def test_live_round_trip() -> None:
         # And the follow-up `more.fetch` names.
         fetched = await client.memory_get(str(added.id))
         assert fetched.id == added.id
+
+    # Last, and a WARNING rather than an assertion (sprint 011 D-3, as
+    # revised by the overseer). Everything above this line is the drift
+    # signal and fails hard. This is only the "nobody has re-proved it
+    # this far yet" note: klams ships often, and a tier that goes red on
+    # a patch bump carrying no contract change is a tier people learn to
+    # ignore — the exact failure #2249 exists to stop. It runs last so
+    # it can say the contract held, which is what makes it actionable.
+    note = untested_version_note(snap.version)
+    if note is not None:
+        # stacklevel=1 on purpose: inside an async test, 2 attributes the
+        # warning to asyncio's event loop rather than to this line.
+        warnings.warn(f"ACTION: {note}", KlamsVersionWarning, stacklevel=1)
+
+
+# --- contract version range (sprint 011) ------------------------------------
+
+
+def test_parse_version_reads_dotted_integers() -> None:
+    assert parse_version("0.1.52") == (0, 1, 52)
+
+
+def test_parse_version_returns_none_for_nonsense() -> None:
+    assert parse_version("") is None
+    assert parse_version("0.1.52-rc1") is None
+    assert parse_version("unknown") is None
+
+
+def test_no_warning_inside_the_tested_range() -> None:
+    assert version_warning(_fmt_version(TESTED_KLAMS_MIN)) is None
+    assert version_warning(_fmt_version(TESTED_KLAMS_MAX)) is None
+
+
+def test_warns_below_the_floor_and_names_the_compact_envelope() -> None:
+    """The floor is real: `{hits, more}` landed in klams 0.1.46, so an
+    older klams breaks this client as surely as a newer one."""
+    warning = version_warning("0.1.30")
+    assert warning is not None
+    assert "0.1.30" in warning
+    assert "older" in warning
+    assert _fmt_version(TESTED_KLAMS_MIN) in warning
+
+
+def test_warns_above_the_ceiling_and_names_the_next_action() -> None:
+    """WI 2249's own example: sixteen versions of drift, found by hand."""
+    warning = version_warning("9.9.9")
+    assert warning is not None
+    assert "9.9.9" in warning
+    assert "newer" in warning
+    assert "gate-live" in warning
+
+
+def test_unparseable_version_warns_rather_than_raising() -> None:
+    warning = version_warning("who-knows")
+    assert warning is not None
+    assert "who-knows" in warning
+
+
+# --- the gate-live note: a warning, never a failure (overseer ruling) --------
+
+
+def test_untested_note_is_silent_inside_the_range() -> None:
+    assert untested_version_note(_fmt_version(TESTED_KLAMS_MAX)) is None
+    assert untested_version_note(_fmt_version(TESTED_KLAMS_MIN)) is None
+
+
+def test_untested_note_above_the_ceiling_says_the_contract_held() -> None:
+    """The whole point of running it last: an out-of-range answer here
+    means a stale constant, not drift, and the note must say so and
+    name the constant to move."""
+    note = untested_version_note("0.1.99")
+    assert note is not None
+    assert "contract holds" in note
+    assert "TESTED_KLAMS_MAX" in note
+    assert "(0, 1, 99)" in note
+    assert "src/klams_mind/klams.py" in note
+
+
+def test_untested_note_below_the_floor_names_the_other_constant() -> None:
+    note = untested_version_note("0.1.30")
+    assert note is not None
+    assert "TESTED_KLAMS_MIN" in note
+    assert "TESTED_KLAMS_MAX" not in note
+
+
+def test_untested_note_handles_an_uncomparable_version() -> None:
+    note = untested_version_note("0.1.53-rc1")
+    assert note is not None
+    assert "0.1.53-rc1" in note
+
+
+def test_klams_version_warning_is_a_warning_not_an_error() -> None:
+    """The overseer's ruling in one assertion: klams ships often, so a
+    version past the ceiling must not turn `gate-live` red. Only the
+    round-trip's contract assertions may do that."""
+    assert issubclass(KlamsVersionWarning, Warning)
+
+    with pytest.warns(KlamsVersionWarning, match="contract holds"):
+        warnings.warn(
+            f"ACTION: {untested_version_note('0.1.99')}",
+            KlamsVersionWarning,
+            stacklevel=1,
+        )

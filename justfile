@@ -21,12 +21,27 @@ typecheck:
 test:
     uv run pytest
 
-# CI invokes exactly this recipe (no inline duplication).
+# The single gate definition (no inline duplication). The `live` tier is
+# deselected here by pytest's addopts — see `gate-live`.
+#
+# fmt-check + lint + typecheck + tests (the one gate; no live services)
 gate:
     uv run ruff format --check .
     uv run ruff check .
     uv run ty check
     uv run pytest
+
+# The contract tier (#2249). Local-only by nature: klams lives on kubs0
+# behind the tailnet, so no GitHub-hosted runner could ever reach it.
+# Run it where klams is reachable, and after deploying either side.
+#
+# `-m live` overrides `gate`'s `-m "not live"` because pytest takes the
+# last `-m`. This gate FAILS on an unreachable klams rather than
+# skipping — #2249 is a story about a green gate that asserted nothing.
+#
+# The klams round-trip, against a real klams (not part of `gate`)
+gate-live:
+    uv run pytest -m live -v
 
 # Prove the plumbing against live klams + kvllm (not part of the gate).
 smoke *ARGS:

@@ -61,6 +61,121 @@ class HealthSnapshot(BaseModel):
     uptime_seconds: int
 
 
+# --- contract version range (#2249) ------------------------------------------
+
+# The klams versions this client's contract has actually been exercised
+# against. Every klams-facing unit test fakes the MCP transport, so the
+# suite validates klams-mind against klams-mind's own idea of the
+# contract; these two numbers are the part that refers to the world.
+#
+# The floor is not decoration. `memory_search`'s compact envelope
+# (`{hits, more}`) landed in klams 0.1.46 (klams sprint 046, #1178), so
+# an *older* klams breaks this client as surely as a newer one does.
+#
+# The ceiling is the newest klams `just gate-live` has round-tripped
+# against. It is a NOTE, never a gate: the live test warns when klams
+# has moved past it and does not fail (sprint 011 D-3, revised on the
+# overseer's ruling). klams ships often — sixteen versions in the
+# window this repo drifted — and a gate that goes red on every patch
+# bump with no contract change is a gate people learn to ignore, which
+# is the failure #2249 exists to stop. The contract assertions in the
+# round-trip are the drift signal; this pair only records how far
+# anyone has re-proved them.
+TESTED_KLAMS_MIN = (0, 1, 46)
+# Raised from 0.1.46 by `just gate-live` on kubs0, 2026-09-21: the
+# round-trip (compact envelope, `full`, `memory_get`) passed against
+# klams 0.1.52. Six versions of drift that nothing in this repo would
+# otherwise have reported.
+TESTED_KLAMS_MAX = (0, 1, 52)
+
+
+def parse_version(version: str) -> tuple[int, ...] | None:
+    """`"0.1.52"` → `(0, 1, 52)`, or None if it is not dotted integers."""
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return None
+
+
+def _fmt_version(version: tuple[int, ...]) -> str:
+    return ".".join(str(part) for part in version)
+
+
+def version_warning(version: str) -> str | None:
+    """One actionable line when klams is outside the tested range.
+
+    None when it is inside — the caller prints nothing. This turns the
+    failure klams-mind actually suffered (a bare `ValidationError` out
+    of a search, sixteen versions after the envelope changed) into a
+    sentence naming both versions before anything parses.
+    """
+    tested = f"{_fmt_version(TESTED_KLAMS_MIN)}-{_fmt_version(TESTED_KLAMS_MAX)}"
+    parsed = parse_version(version)
+    if parsed is None:
+        return (
+            f"klams reports version {version!r}, which this client cannot "
+            f"compare against the range it was tested on ({tested})"
+        )
+    if parsed < TESTED_KLAMS_MIN:
+        return (
+            f"klams is {version}, older than the {tested} this client was "
+            f"tested against — `memory_search`'s compact envelope landed in "
+            f"{_fmt_version(TESTED_KLAMS_MIN)}, so searches will not parse"
+        )
+    if parsed > TESTED_KLAMS_MAX:
+        return (
+            f"klams is {version}, newer than the {tested} this client was "
+            f"tested against — run `just gate-live` to check the contract, "
+            f"then bump TESTED_KLAMS_MAX"
+        )
+    return None
+
+
+class KlamsVersionWarning(UserWarning):
+    """klams is outside the range this client has been exercised against.
+
+    A warning and never a test failure. See the ceiling's note above:
+    the drift signal is the round-trip's contract assertions, not the
+    version number, and a tier that goes red on a no-op patch bump
+    stops being read.
+    """
+
+
+def untested_version_note(version: str) -> str | None:
+    """The `gate-live` message, or None when `version` is in range.
+
+    Distinct from `version_warning` because the context is the
+    opposite: this is spoken *after* the live round-trip has passed, so
+    an out-of-range answer means a stale constant rather than drift —
+    and the one thing worth saying is which constant to move.
+    """
+    parsed = parse_version(version)
+    if parsed is None:
+        return (
+            f"the live round-trip passed, but klams reports version "
+            f"{version!r}, which cannot be compared against this client's "
+            f"tested range — check TESTED_KLAMS_MIN/MAX in "
+            f"src/klams_mind/klams.py by hand"
+        )
+    if parsed < TESTED_KLAMS_MIN:
+        return (
+            f"the live round-trip passed against klams {version}, which is "
+            f"BELOW this client's tested floor {_fmt_version(TESTED_KLAMS_MIN)} "
+            f"— lower TESTED_KLAMS_MIN to {parsed} in "
+            f"src/klams_mind/klams.py, or find out why an older klams still "
+            f"speaks the compact contract"
+        )
+    if parsed > TESTED_KLAMS_MAX:
+        return (
+            f"the live round-trip passed against klams {version}: the "
+            f"contract holds, only the constant is stale. Bump "
+            f"TESTED_KLAMS_MAX to {parsed} in src/klams_mind/klams.py so "
+            f"`smoke` stops warning about a combination this gate has now "
+            f"proven"
+        )
+    return None
+
+
 # --- memories ----------------------------------------------------------------
 
 

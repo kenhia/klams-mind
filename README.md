@@ -212,18 +212,88 @@ If klams-mind ever raises `ValidationError` out of a search, suspect
 this contract first: it is what a version skew between the two projects
 looks like. `smoke` says so in as many words.
 
+#### The tested version range
+
+klams-mind now says which klams versions it has actually been exercised
+against, rather than waiting for a parse failure to imply it.
+`TESTED_KLAMS_MIN`/`TESTED_KLAMS_MAX` in `klams_mind/klams.py` bound the
+range, and `smoke` warns on stderr — in both human and `--json` mode —
+when the klams it just health-checked falls outside it:
+
+```
+warning: klams is 0.1.53, newer than the 0.1.46-0.1.52 this client was
+tested against — run `just gate-live` to check the contract, then bump
+TESTED_KLAMS_MAX
+```
+
+The floor is not decoration: the compact envelope landed in klams
+0.1.46, so an *older* klams breaks this client as surely as a newer one.
+
+The ceiling is maintained by `just gate-live`, which checks it **last,
+after its contract assertions have passed, and warns rather than
+fails**:
+
+```
+ACTION: the live round-trip passed against klams 0.1.53: the contract
+holds, only the constant is stale. Bump TESTED_KLAMS_MAX to (0, 1, 53)
+in src/klams_mind/klams.py so `smoke` stops warning about a combination
+this gate has now proven
+```
+
+A warning and not a failure, deliberately. klams ships often — sixteen
+versions in the window this repo drifted — and a tier that goes red on
+every patch bump carrying no contract change is a tier people learn to
+ignore, which is the failure this whole mechanism exists to stop. **The
+contract assertions are the drift signal and they fail hard**; the
+ceiling is only the record of how far anyone has re-proved them.
+
+Running it last is what makes the warning actionable: it can say the
+contract still held, so an out-of-range answer means a stale constant
+rather than drift.
+
 ## Development
 
 ```sh
 uv sync          # create/refresh the venv
 just --list      # discover recipes
-just gate        # fmt-check + lint + typecheck + tests (what CI runs)
+just gate        # fmt-check + lint + typecheck + tests — the single gate
 just check       # alias for `gate`, the name the kproject harness uses
+just gate-live   # the contract tier: the klams round-trip, against real klams
 just smoke       # check the live klams + kvllm plumbing (not in the gate)
-
-# live tests (skipped otherwise) need the real service:
-KLAMS_URL=http://localhost:7777 uv run pytest -m live
 ```
+
+### Two test tiers
+
+Every klams-facing test in `just gate` fakes the MCP transport by
+injecting a tool-caller, so the suite validates klams-mind against
+klams-mind's *own idea* of the klams contract. That is fast and it is
+also a blind spot: when klams sprint 046 changed `memory_search`'s
+envelope, this repo broke completely — smoke, evals, extraction's
+duplicate check, contradiction pairing — and the gate stayed green
+across sixteen klams versions. It was found by a human happening to run
+`smoke`.
+
+So the round-trip that talks to a real klams is its own tier:
+
+| Recipe | Marker | Talks to klams | Run it |
+|---|---|---|---|
+| `just gate` | `-m "not live"` | no | every commit |
+| `just gate-live` | `-m live` | yes | where klams is reachable, and after deploying either side |
+
+`gate-live` **fails** when klams is unreachable — it is deliberately not
+a `skipif`, because a skip cannot fail, and a contract gate that reports
+`1 skipped, exit 0` is the same silent green this tier exists to remove.
+
+It takes its URL from the ordinary config chain, so a checkout on kubs0
+works with nothing exported; `KLAMS_URL=http://localhost:7777 just
+gate-live` still wins.
+
+**The live tier is local-only, by nature rather than by policy.** klams
+runs on kubs0 and is reachable over the tailnet, so no GitHub-hosted
+runner could ever reach it — `gate-live` belongs in the deploy/verify
+path on a homelab host, not in a hosted CI workflow. (This repo has no
+GitHub Actions workflow at all today; `just gate` is the single gate
+definition, run before every commit.)
 
 Workflow, principles, and the sprint convention are in
 [AGENTS.md](AGENTS.md). The repo is on the

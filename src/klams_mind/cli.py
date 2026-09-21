@@ -33,7 +33,7 @@ from klams_mind.extract.chain import build_extraction_chain
 from klams_mind.extract.report import to_json as extraction_to_json
 from klams_mind.extract.report import to_markdown as extraction_to_markdown
 from klams_mind.extract.runner import ExtractionResult, extract_windows
-from klams_mind.klams import FactMemory
+from klams_mind.klams import FactMemory, version_warning
 from klams_mind.klams import connect as _connect
 from klams_mind.llm import build_chat as _build_chat
 from klams_mind.llm import ping
@@ -80,6 +80,11 @@ async def run_smoke(
                 "url": cfg.klams.base_url,
                 "status": snap.status,
                 "version": snap.version,
+                # #2249: klams-mind's whole suite fakes the MCP
+                # transport, so a klams that has moved out from under
+                # this client is invisible until something fails to
+                # parse. smoke already had the version in hand.
+                "version_warning": version_warning(snap.version),
             }
 
             step = "register author"
@@ -185,6 +190,18 @@ def diagnose(step: str, exc: BaseException, cfg: Config, *, host: str | None = N
     )
 
 
+def _warn_version(report: dict[str, Any]) -> None:
+    """Echo the version-range warning to stderr, if there is one.
+
+    Always stderr, in both output modes: a `--json` consumer reads the
+    field off the report, and a human piping to `jq` still sees the
+    line because it never touches stdout.
+    """
+    warning = report.get("klams", {}).get("version_warning")
+    if warning:
+        typer.echo(f"warning: {warning}", err=True)
+
+
 def _print_human(report: dict[str, Any]) -> None:
     klams, author = report["klams"], report["author"]
     search, model = report["search"], report["model"]
@@ -193,6 +210,7 @@ def _print_human(report: dict[str, Any]) -> None:
     typer.echo(f'search  "{search["query"]}" -> {search["hits"]} hit(s)')
     typer.echo(f"model   {model['name']} at {model['endpoint']} -> {model['reply']!r}")
     typer.echo("smoke: all steps passed")
+    _warn_version(report)
 
 
 @app.callback()
@@ -230,6 +248,7 @@ def smoke(
         raise typer.Exit(1) from failure
     if json_output:
         typer.echo(json.dumps(report, indent=2))
+        _warn_version(report)
     else:
         _print_human(report)
 
