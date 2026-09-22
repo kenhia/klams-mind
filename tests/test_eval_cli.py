@@ -1,4 +1,4 @@
-"""`klams-mind eval run <suite>` — output modes and exit codes."""
+"""`klams-mind eval run` / `eval pins` — output modes and exit codes."""
 
 import json
 from contextlib import asynccontextmanager
@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from klams_mind.cli import app, run_eval
 from klams_mind.config import Config, KlamsConfig
 from klams_mind.eval.checks import RetrievedItem
+from klams_mind.eval.pins import PinResolution, PinState
 from klams_mind.eval.provenance import Provenance, suite_digest
 from klams_mind.eval.report import Report
 from klams_mind.eval.runner import EvalQueryResult
@@ -253,3 +254,84 @@ def test_cli_tolerates_a_missing_or_unstamped_baseline(tmp_path: Path, monkeypat
         result = CliRunner().invoke(app, ["eval", "run", suite_arg, "--baseline", baseline])
         assert result.exit_code == 0
         assert "Baseline captured against" not in result.stdout
+
+
+# --- `eval pins`: the pin-refresh recipe (#2247, sprint 012) ---------------
+
+PINNED_SUITE = """\
+name = "pinned-suite"
+
+[[queries]]
+query = "what runs klams"
+top_k = 3
+
+[[queries.checks]]
+type = "memory_id"
+value = "019fa04a-ceac"
+"""
+
+
+def write_pinned_suite(tmp_path: Path) -> Path:
+    p = tmp_path / "pinned.toml"
+    p.write_text(PINNED_SUITE)
+    return p
+
+
+def _pin(state: PinState) -> PinResolution:
+    return PinResolution(
+        query="what runs klams",
+        pin="019fa04a-ceac",
+        state=state,
+        rank=0,
+        live_id="019fb6b1-1c9a-7850",
+        chain=("019fa04a-ceac",) if state == "superseded" else (),
+    )
+
+
+def test_eval_pins_exits_zero_when_no_pin_has_drifted(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    async def fake(suite, cfg, **kw):  # type: ignore[no-untyped-def]
+        return [_pin("current")]
+
+    monkeypatch.setattr("klams_mind.cli.run_pin_refresh", fake)
+    result = CliRunner().invoke(app, ["eval", "pins", str(write_pinned_suite(tmp_path))])
+    assert result.exit_code == 0
+    assert "0 of 1" in result.stdout
+
+
+def test_eval_pins_exits_one_on_drift(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # The recipe's whole job: make rot visible. A silent zero exit on a
+    # stale pin would leave it exactly as invisible as it was before.
+    async def fake(suite, cfg, **kw):  # type: ignore[no-untyped-def]
+        return [_pin("superseded")]
+
+    monkeypatch.setattr("klams_mind.cli.run_pin_refresh", fake)
+    result = CliRunner().invoke(app, ["eval", "pins", str(write_pinned_suite(tmp_path))])
+    assert result.exit_code == 1
+    assert "1 of 1" in result.stdout
+
+
+def test_eval_pins_json(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    async def fake(suite, cfg, **kw):  # type: ignore[no-untyped-def]
+        return [_pin("current")]
+
+    monkeypatch.setattr("klams_mind.cli.run_pin_refresh", fake)
+    result = CliRunner().invoke(app, ["eval", "pins", str(write_pinned_suite(tmp_path)), "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["drifted"] == 0
+
+
+def test_eval_pins_says_so_when_a_suite_has_no_pins(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # Exit 0 with a word on stderr, not a confident "no drift" — a suite
+    # with nothing to check has not been checked.
+    async def fake(suite, cfg, **kw):  # type: ignore[no-untyped-def]
+        return []
+
+    monkeypatch.setattr("klams_mind.cli.run_pin_refresh", fake)
+    result = CliRunner().invoke(app, ["eval", "pins", str(write_suite(tmp_path))])
+    assert result.exit_code == 0
+    assert "no memory_id checks" in result.stderr
+
+
+def test_eval_pins_bad_suite_exits_two(tmp_path: Path) -> None:
+    result = CliRunner().invoke(app, ["eval", "pins", str(tmp_path / "nope.toml")])
+    assert result.exit_code == 2

@@ -20,6 +20,9 @@ from klams_mind.contradict.pairing import find_candidate_pairs
 from klams_mind.contradict.report import to_json as contradict_to_json
 from klams_mind.contradict.report import to_markdown as contradict_to_markdown
 from klams_mind.contradict.runner import DetectionResult, detect_contradictions
+from klams_mind.eval.pins import PinResolution, drifted, resolve_pins
+from klams_mind.eval.pins import to_json as pins_to_json
+from klams_mind.eval.pins import to_markdown as pins_to_markdown
 from klams_mind.eval.provenance import Provenance, now_stamp, parse_provenance, suite_digest
 from klams_mind.eval.report import Report, build_report, to_json, to_markdown
 from klams_mind.eval.runner import (
@@ -368,6 +371,74 @@ def eval_run(
     report.baseline = prior
     typer.echo(to_json(report) if json_output else to_markdown(report))
     raise typer.Exit(0 if report.regressions == 0 else 1)
+
+
+async def run_pin_refresh(
+    suite: Suite,
+    cfg: Config,
+    *,
+    connect: Any = _connect,
+    retriever_factory: Any = KlamsRetriever,
+) -> list[PinResolution]:
+    """Re-resolve the suite's `memory_id` pins against live klams."""
+    scoped, _ = eval_klams_config(cfg.klams)
+    async with connect(scoped) as client:
+        retriever: Retriever = retriever_factory(client)
+        return await resolve_pins(suite, retriever)
+
+
+@eval_app.command("pins")
+def eval_pins(
+    suite_path: Annotated[Path, typer.Argument(metavar="SUITE", help="TOML query suite.")],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit the drift report as JSON on stdout.")
+    ] = False,
+    out: Annotated[
+        Path | None, typer.Option(help="Also write the markdown report to this file.")
+    ] = None,
+    config: Annotated[
+        Path | None, typer.Option(help="Config file (default: KLAMS_MIND_CONFIG).")
+    ] = None,
+    debug: Annotated[bool, typer.Option(help="Re-raise failures with full tracebacks.")] = False,
+) -> None:
+    """Re-resolve every `memory_id` pin; exit 1 if any has drifted.
+
+    klams-mind #2247. `eval run` now follows a supersession chain, so a
+    pin naming a long-dead record still passes — which is the right
+    behaviour for a gate and the wrong thing to leave unsaid. This is
+    the recipe that says it: which pins still name a live record, which
+    have been superseded and by what, and which have no witness at all.
+
+    Drift is not a gate failure in the CI sense — it is a fact about a
+    corpus that changes with no commit in this repo — so this lives
+    outside `just gate` by design. Run it when the suite feels stale,
+    and after klams' corpus moves.
+    """
+    cfg = load_config(path=config)
+    try:
+        suite = load_suite(suite_path)
+    except EvalLoadError as exc:
+        typer.echo(f"eval pins: {exc}", err=True)
+        raise typer.Exit(2) from exc
+
+    try:
+        rows = asyncio.run(run_pin_refresh(suite, cfg))
+    except Exception as exc:
+        if debug:
+            raise
+        typer.echo(f"eval pins: retrieval failed: {exc}", err=True)
+        typer.echo("check klams (kubs0:7777) and the X-Homelab-Agent identity", err=True)
+        raise typer.Exit(1) from exc
+
+    if not rows:
+        typer.echo(f"eval pins: {suite_path.name} has no memory_id checks", err=True)
+        raise typer.Exit(0)
+
+    if out is not None:
+        out.write_text(pins_to_markdown(rows))
+        typer.echo(f"wrote {out}", err=True)
+    typer.echo(pins_to_json(rows) if json_output else pins_to_markdown(rows))
+    raise typer.Exit(1 if drifted(rows) else 0)
 
 
 def _read_provenance(path: Path | None) -> Provenance | None:

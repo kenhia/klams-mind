@@ -207,6 +207,16 @@ class _MemoryBase(BaseModel):
     author: AuthorRef
     created_at: datetime
     updated_at: datetime
+    # The `memory_supersede` links, both directions (klams-mind #2247).
+    # klams hides a superseded record from search rather than deleting
+    # it, so `memory_get` still serves it and these two are how a caller
+    # walks a lineage: `supersedes` points at the record this one
+    # replaced, `superseded_by` at the one that replaced it. klams omits
+    # each where it does not apply, and sends `supersedes` on search hits
+    # in both envelopes — this client simply never declared them, so
+    # pydantic dropped data that had been arriving since sprint 001.
+    supersedes: UUID | None = None
+    superseded_by: UUID | None = None
 
 
 class FactMemory(_MemoryBase):

@@ -40,6 +40,10 @@ class RetrievedItem:
     heading_path: str | None = None
     # Pre-fusion match quality. Post-RRF `score` is pure rank.
     raw_score: float | None = None
+    # The ids this hit has superseded, transitively, nearest ancestor
+    # first (klams-mind #2247). Resolved once by the retriever so checks
+    # stay pure; empty for the overwhelming majority of hits.
+    ancestry: tuple[str, ...] = ()
 
     def body(self) -> str:
         """Content with the heading breadcrumb stripped.
@@ -179,7 +183,7 @@ def _min_body_chars(check: Check, hits: list[RetrievedItem]) -> CheckResult:
 
 
 def _memory_id(check: Check, hits: list[RetrievedItem]) -> CheckResult:
-    """A specific memory must surface, optionally within `max_rank`.
+    """A pinned memory — or whatever it has become — must surface.
 
     This is the curated-beats-bulk assertion. klams#628's failure was
     *not* that the hand-written gotcha was missing from the store — it
@@ -187,18 +191,52 @@ def _memory_id(check: Check, hits: list[RetrievedItem]) -> CheckResult:
     on presence alone would have passed while the bug was live, so
     `max_rank` is what gives the check teeth. Matching is by prefix, so a
     suite can name `019f95dc-df08` without the full UUID.
+
+    **The pin names a lineage, not a leaf** (klams-mind #2247). klams
+    treats supersession as a first-class operation and hides the
+    superseded record, so a pinned id is a ticking assertion by
+    construction: sprint 009 found one that had gone off, with twelve
+    more carrying the same fuse. A hit therefore satisfies the pin when
+    it *is* the pinned memory, or when it descends from it through
+    `memory_supersede` — the retriever resolves that ancestry, so this
+    stays a pure function of the page.
+
+    A direct hit wins over a descendant: the record itself is the better
+    witness, and the detail must not report a supersession that has not
+    happened.
     """
     if check.value is None:
         return _missing_value(check)
     wanted = check.value.lower()
+    match = _find_pin(wanted, hits)
+    if match is None:
+        return CheckResult(check, False, f"{check.value} absent from {len(hits)} result(s)")
+    rank, hit, via_chain = match
+    # The lineage is worth naming either way: on a pass it is how the
+    # suite learns its pin is dated, and on a failure it says which
+    # record was being outranked.
+    trail = f" (superseded — now {hit.memory_id[:13]})" if via_chain else ""
+    if check.max_rank is not None and rank > check.max_rank:
+        return CheckResult(
+            check,
+            False,
+            f"{check.value}{trail} surfaced at rank {rank}, above the "
+            f"max_rank {check.max_rank} — it is being outranked",
+        )
+    return CheckResult(check, True, f"{check.value}{trail} at rank {rank}")
+
+
+def _find_pin(wanted: str, hits: list[RetrievedItem]) -> tuple[int, RetrievedItem, bool] | None:
+    """`(rank, hit, via_chain)` for the best witness of `wanted`, or None.
+
+    Two passes rather than one, because a direct hit anywhere on the page
+    beats a descendant at rank 0 — otherwise a check would report a
+    supersession purely because the successor happened to rank higher.
+    """
     for rank, h in enumerate(hits):
         if h.memory_id.lower().startswith(wanted):
-            if check.max_rank is not None and rank > check.max_rank:
-                return CheckResult(
-                    check,
-                    False,
-                    f"{check.value} surfaced at rank {rank}, above the "
-                    f"max_rank {check.max_rank} — it is being outranked",
-                )
-            return CheckResult(check, True, f"{check.value} at rank {rank}")
-    return CheckResult(check, False, f"{check.value} absent from {len(hits)} result(s)")
+            return rank, h, False
+    for rank, h in enumerate(hits):
+        if any(anc.lower().startswith(wanted) for anc in h.ancestry):
+            return rank, h, True
+    return None

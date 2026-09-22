@@ -186,3 +186,117 @@ async def test_a_passing_known_open_query_is_flagged_newly_fixed() -> None:
 async def test_queries_default_to_expect_pass() -> None:
     # A suite author who writes nothing gets the strict bar.
     assert EvalQuery(query="q").expect == "pass"
+
+
+# --- supersession lineage (WI 2247, sprint 012) ----------------------------
+#
+# klams returns `supersedes` on a hit (backward: "I replaced X") in both
+# envelopes, and `memory_get` on a superseded record still resolves — so
+# the whole lineage is reachable by walking backward from each hit. The
+# retriever does that walk once, so `evaluate_check` stays pure.
+
+
+class ScriptedCaller:
+    """Answers each tool call from a per-tool script, recording calls."""
+
+    def __init__(self, search: object, gets: dict[str, object]) -> None:
+        self.search = search
+        self.gets = gets
+        self.calls: list[tuple[str, dict]] = []
+
+    async def __call__(self, name: str, args: dict) -> CallToolResult:
+        self.calls.append((name, args))
+        if name == "memory_search":
+            return tool_ok(self.search)
+        payload = self.gets.get(str(args["id"]))
+        if payload is None:
+            return CallToolResult(
+                isError=True,
+                content=[TextContent(type="text", text="not found")],
+            )
+        return tool_ok(payload)
+
+
+def knowledge(mid: str, *, supersedes: str | None = None, text: str = "note") -> dict:
+    m = dict(KNOWLEDGE) | {"id": mid, "text": text}
+    if supersedes is not None:
+        m["supersedes"] = supersedes
+    return m
+
+
+HEAD = "019fb6b1-1c9a-7850-9822-79ef941025f2"
+MID = "019fb1c9-7c16-7513-9ad4-f067611afbf1"
+ROOT = "019fa04a-ceac-7253-9420-ea3a39cd0ef2"
+SIBLING = "019fb6b1-9999-7850-9822-79ef941025f2"
+
+
+async def test_retriever_walks_the_supersedes_chain_into_ancestry() -> None:
+    caller = ScriptedCaller(
+        search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)}],
+        gets={MID: knowledge(MID, supersedes=ROOT), ROOT: knowledge(ROOT)},
+    )
+    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+
+    (item,) = await retr.search("q", top_k=5)
+
+    assert item.memory_id == HEAD
+    # Nearest ancestor first — the pin may name any depth of the chain.
+    assert item.ancestry == (MID, ROOT)
+    assert [c[0] for c in caller.calls] == ["memory_search", "memory_get", "memory_get"]
+
+
+async def test_retriever_leaves_ancestry_empty_for_an_ordinary_hit() -> None:
+    # The common case by a wide margin: one search, no extra round trips.
+    caller = ScriptedCaller(
+        search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD)}], gets={}
+    )
+    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+
+    (item,) = await retr.search("q", top_k=5)
+
+    assert item.ancestry == ()
+    assert [c[0] for c in caller.calls] == ["memory_search"]
+
+
+async def test_retriever_stops_at_an_unreadable_ancestor_without_failing() -> None:
+    # A boundary, so it is defensive by design: an ancestor klams will
+    # not serve truncates the lineage. An eval that dies here measures
+    # nothing, which is strictly worse than one that measures less.
+    caller = ScriptedCaller(
+        search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)}],
+        gets={},
+    )
+    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+
+    (item,) = await retr.search("q", top_k=5)
+
+    assert item.ancestry == (MID,)
+
+
+async def test_retriever_does_not_loop_on_a_cyclic_chain() -> None:
+    caller = ScriptedCaller(
+        search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)}],
+        gets={MID: knowledge(MID, supersedes=HEAD)},
+    )
+    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+
+    (item,) = await retr.search("q", top_k=5)
+
+    assert item.ancestry == (MID,)
+
+
+async def test_retriever_resolves_each_ancestor_once_across_hits() -> None:
+    # Two hits sharing a lineage must not pay for it twice.
+    caller = ScriptedCaller(
+        search=[
+            {"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)},
+            {"score": 0.8, "source_rank": 1, "memory": knowledge(SIBLING, supersedes=MID)},
+        ],
+        gets={MID: knowledge(MID, supersedes=ROOT), ROOT: knowledge(ROOT)},
+    )
+    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+
+    items = await retr.search("q", top_k=5)
+
+    assert [i.ancestry for i in items] == [(MID, ROOT), (MID, ROOT)]
+    assert [c[0] for c in caller.calls].count("memory_get") == 2

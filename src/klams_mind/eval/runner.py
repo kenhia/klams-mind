@@ -92,7 +92,7 @@ async def run_suite(suite: Suite, retriever: Retriever) -> list[EvalQueryResult]
     return results
 
 
-def _to_item(sm: ScoredMemory) -> RetrievedItem:
+def _to_item(sm: ScoredMemory, ancestry: tuple[str, ...] = ()) -> RetrievedItem:
     """Flatten a klams scored hit into what a retrieval check inspects."""
     m = sm.memory
     if m.kind == "knowledge":
@@ -107,6 +107,7 @@ def _to_item(sm: ScoredMemory) -> RetrievedItem:
             content_hash=m.content_hash,
             heading_path=m.heading_path,
             raw_score=sm.raw_score,
+            ancestry=ancestry,
         )
     if m.kind == "fact":
         return RetrievedItem(
@@ -118,6 +119,7 @@ def _to_item(sm: ScoredMemory) -> RetrievedItem:
             source_rank=sm.source_rank,
             memory_id=str(m.id),
             raw_score=sm.raw_score,
+            ancestry=ancestry,
         )
     return RetrievedItem(
         content=f"{m.category} {json.dumps(m.payload)}",
@@ -128,13 +130,72 @@ def _to_item(sm: ScoredMemory) -> RetrievedItem:
         source_rank=sm.source_rank,
         memory_id=str(m.id),
         raw_score=sm.raw_score,
+        ancestry=ancestry,
     )
 
 
+# A lineage deeper than this is a runaway, not a history. klams' longest
+# real chain at the time of writing is three records; the cap exists so a
+# corrupted link cannot turn one eval query into unbounded round trips.
+MAX_LINEAGE_DEPTH = 32
+
+
 class KlamsRetriever:
+    """Adapter over `KlamsClient`, resolving each hit's supersession lineage.
+
+    The ancestry walk lives here rather than in the checks because
+    `evaluate_check` is a pure function of the page and is worth keeping
+    that way — and because the resolution is per-record, so a cache makes
+    it nearly free across a suite. Ancestors are cached for the
+    retriever's lifetime: a memory's `supersedes` link is immutable once
+    written, so there is nothing to invalidate within a run.
+    """
+
     def __init__(self, client: KlamsClient) -> None:
         self._client = client
+        # memory id -> the id it superseded (None = end of the chain).
+        self._parent: dict[str, str | None] = {}
 
     async def search(self, query: str, top_k: int) -> list[RetrievedItem]:
         hits = await self._client.memory_search_full(query, top_k=top_k)
-        return [_to_item(h) for h in hits]
+        return [_to_item(h, await self._ancestry(h)) for h in hits]
+
+    async def _ancestry(self, sm: ScoredMemory) -> tuple[str, ...]:
+        """Ids this hit has superseded, transitively, nearest first.
+
+        Walks backward from the hit's own `supersedes`, because that is
+        the direction klams gives us for free: `supersedes` rides on the
+        search hit, so an ordinary hit — which is almost all of them —
+        costs no extra call at all.
+        """
+        chain: list[str] = []
+        seen = {str(sm.memory.id)}
+        parent = sm.memory.supersedes
+        current = str(parent) if parent is not None else None
+        while current is not None and len(chain) < MAX_LINEAGE_DEPTH:
+            if current in seen:
+                break  # a cycle klams should not produce; refuse to spin on it
+            seen.add(current)
+            chain.append(current)
+            current = await self._parent_of(current)
+        return tuple(chain)
+
+    async def _parent_of(self, memory_id: str) -> str | None:
+        """One hop back, cached. A record klams will not serve ends the walk.
+
+        Defensive at the boundary on purpose: a superseded ancestor can
+        be hard-deleted or fall outside this identity's read scope, and
+        an eval that dies on that measures nothing — which is strictly
+        worse than one that measures a shorter lineage.
+        """
+        if memory_id in self._parent:
+            return self._parent[memory_id]
+        try:
+            memory = await self._client.memory_get(memory_id)
+        except Exception:
+            self._parent[memory_id] = None
+            return None
+        parent = memory.supersedes
+        resolved = str(parent) if parent is not None else None
+        self._parent[memory_id] = resolved
+        return resolved

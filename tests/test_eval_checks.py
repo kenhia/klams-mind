@@ -111,6 +111,7 @@ def k(
     content_hash: str | None = None,
     heading_path: str | None = None,
     memory_id: str = "",
+    ancestry: tuple[str, ...] = (),
 ) -> RetrievedItem:
     return RetrievedItem(
         content=content,
@@ -119,6 +120,7 @@ def k(
         content_hash=content_hash,
         heading_path=heading_path,
         memory_id=memory_id,
+        ancestry=ancestry,
     )
 
 
@@ -235,3 +237,63 @@ def test_memory_id_passes_within_max_rank() -> None:
         k("the gotcha", memory_id="019f95dc-df08-70e3"),
     ]
     assert evaluate_check(Check(type="memory_id", value="019f95dc-df08", max_rank=1), hits).passed
+
+
+# --- memory_id follows the supersedes chain (WI 2247, sprint 012) ----------
+#
+# A pinned id is a ticking assertion in a corpus designed for
+# supersession: klams hides the superseded record, so the pin stops
+# matching the moment the knowledge it named is re-measured. The pin
+# therefore names a LINEAGE — the memory, or whatever it has since
+# become — and matching walks the hit's ancestry as well as its own id.
+
+
+def test_memory_id_matches_a_hit_that_descends_from_the_pin() -> None:
+    # WI 2247's live shape: 019fa04a-ceac → 019fb1c9-7c16 → 019fb6b1-1c9a.
+    # The pin names the root; only the head is still in the corpus.
+    hits = [
+        k(
+            "the re-measured note",
+            memory_id="019fb6b1-1c9a-7850-9822-79ef941025f2",
+            ancestry=(
+                "019fb1c9-7c16-7513-9ad4-f067611afbf1",
+                "019fa04a-ceac-7253-9420-ea3a39cd0ef2",
+            ),
+        )
+    ]
+    r = evaluate_check(Check(type="memory_id", value="019fa04a-ceac", max_rank=0), hits)
+    assert r.passed
+    # The detail has to say the pin is dated, or the suite never learns.
+    assert "superseded" in r.detail and "019fb6b1" in r.detail
+
+
+def test_memory_id_via_chain_still_respects_max_rank() -> None:
+    # Following the chain must not cost the check its teeth: a lineage
+    # that surfaces but loses its slot is still a failure.
+    hits = [
+        k("bulk chunk", memory_id="aaaa"),
+        k("bulk chunk", memory_id="bbbb"),
+        k("the head", memory_id="019fb6b1-1c9a", ancestry=("019fa04a-ceac",)),
+    ]
+    r = evaluate_check(Check(type="memory_id", value="019fa04a-ceac", max_rank=1), hits)
+    assert not r.passed
+    assert "rank 2" in r.detail and "outranked" in r.detail
+
+
+def test_memory_id_prefers_a_direct_hit_over_a_descendant() -> None:
+    # Both are in the page; the record itself is the better witness and
+    # the detail should not claim a supersession that did not happen.
+    hits = [
+        k("the original, still live", memory_id="019fa04a-ceac-7253"),
+        k("a descendant", memory_id="019fb6b1-1c9a", ancestry=("019fa04a-ceac",)),
+    ]
+    r = evaluate_check(Check(type="memory_id", value="019fa04a-ceac"), hits)
+    assert r.passed
+    assert "superseded" not in r.detail
+
+
+def test_memory_id_ignores_an_unrelated_ancestry() -> None:
+    hits = [k("something else", memory_id="cccc", ancestry=("dddd", "eeee"))]
+    r = evaluate_check(Check(type="memory_id", value="019fa04a-ceac"), hits)
+    assert not r.passed
+    assert "absent" in r.detail
