@@ -337,6 +337,51 @@ async def test_memory_get_fetches_the_full_record() -> None:
     assert "kai:8000" in memory.text
 
 
+async def test_memory_get_carries_the_supersession_links() -> None:
+    """A superseded record still resolves, and names both neighbours.
+
+    WI 2247, measured against klams 0.1.52: `memory_supersede` HIDES the
+    old record from search rather than deleting it, and `memory_get`
+    serves it with `supersedes` (backward) and `superseded_by` (forward).
+    That pair is the whole basis for an eval check that follows a
+    lineage instead of pinning a leaf — klams-mind simply never declared
+    the fields, so pydantic dropped data that had been arriving all along.
+    """
+    superseded = KNOWLEDGE_MEMORY | {
+        "supersedes": "019fa04a-ceac-7253-9420-ea3a39cd0ef2",
+        "superseded_by": "019fb6b1-1c9a-7850-9822-79ef941025f2",
+    }
+    client = make_client(FakeToolCaller(tool_ok(superseded)))
+
+    memory = await client.memory_get("019fb1c9-7c16-7513-9ad4-f067611afbf1")
+
+    assert isinstance(memory, KnowledgeMemory)
+    assert str(memory.supersedes) == "019fa04a-ceac-7253-9420-ea3a39cd0ef2"
+    assert str(memory.superseded_by) == "019fb6b1-1c9a-7850-9822-79ef941025f2"
+
+
+async def test_memory_search_full_carries_supersedes() -> None:
+    """The `full` envelope carries it too — not only the compact hit.
+
+    The eval harness is the documented `full` caller, so a field present
+    only on the compact shape would be useless to the suite. Measured
+    present on both against klams 0.1.52.
+    """
+    envelope = [
+        {
+            "score": 0.9,
+            "source_rank": 0,
+            "memory": KNOWLEDGE_MEMORY | {"supersedes": "019fb1c9-7c16-7513-9ad4-f067611afbf1"},
+        }
+    ]
+    client = make_client(FakeToolCaller(tool_ok(envelope)))
+
+    (hit,) = await client.memory_search_full("q")
+
+    assert isinstance(hit.memory, KnowledgeMemory)
+    assert str(hit.memory.supersedes) == "019fb1c9-7c16-7513-9ad4-f067611afbf1"
+
+
 # --- memory_add -------------------------------------------------------------
 
 
@@ -548,6 +593,38 @@ async def test_live_round_trip() -> None:
         # And the follow-up `more.fetch` names.
         fetched = await client.memory_get(str(added.id))
         assert fetched.id == added.id
+
+        # The supersession contract (#2247, sprint 012). `memory_id`
+        # checks now follow a `supersedes` chain, so this client depends
+        # on three facts about real klams that every unit test above
+        # fakes — which is #2249's shape exactly, and the reason this
+        # lives in the contract tier instead of the ordinary gate.
+        #
+        # `019fa04a-ceac…` is a SUPERSEDED record, and that is what makes
+        # it a safe fixture rather than a new instance of the fuse this
+        # sprint removed: supersession is terminal, so its state cannot
+        # regress. The chain may grow past it; it can never un-supersede.
+        superseded_id = "019fa04a-ceac-7253-9420-ea3a39cd0ef2"
+        hidden = await client.memory_get(superseded_id)
+
+        # 1. A superseded record is HIDDEN, not deleted — memory_get
+        #    still serves it. Without this the ancestry walk dead-ends.
+        assert str(hidden.id) == superseded_id
+        # 2. It names both neighbours. `supersedes` is what the walk
+        #    follows backward; `superseded_by` is what proves it is dead.
+        assert hidden.superseded_by is not None
+        assert hidden.supersedes is not None
+        # 3. And it is genuinely absent from search, which is the
+        #    invariant the eval suite's paraphrase query exists to prove.
+        page = await client.memory_search_full(
+            "klams memory_search score field behavior ranking", top_k=8
+        )
+        assert all(str(h.memory.id) != superseded_id for h in page)
+        # 4. `supersedes` rides on a search hit too, in the `full`
+        #    envelope the eval harness uses — not only on `memory_get`.
+        #    A field present only on the compact shape would be useless
+        #    to the suite, and this is the assertion that says so.
+        assert any(h.memory.supersedes is not None for h in page)
 
     # Last, and a WARNING rather than an assertion (sprint 011 D-3, as
     # revised by the overseer). Everything above this line is the drift

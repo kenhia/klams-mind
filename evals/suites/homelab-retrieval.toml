@@ -405,20 +405,33 @@ value = "listen_addr"
 # memory surfacing at rank 7 still gets believed").
 query = "klams memory_search score field behavior ranking"
 top_k = 8
-# klams-mind #2247 (sprint 009): the pinned head of that chain,
-# `019fa04a-ceac`, is itself now superseded — by `019fbc9c-5c74`, the
-# same subject re-measured at klams 0.1.41 (korg #634) — and is absent
-# from the corpus at top_k 50. The `no_hallucination` half below still
-# holds, so what rotted is the id pin, not the invariant. Re-pinning
-# changes what this query measures, so it waits on a ruling rather
-# than being quietly repointed.
-expect = "known_open"
-tracking = "korg:2247"
 
 [[queries.checks]]
+# klams-mind #2247, settled in sprint 012. The pin names the LINEAGE
+# ROOT, not a live record, and that is now deliberate: `memory_id`
+# follows the `supersedes` chain, so this one value keeps naming the
+# same body of knowledge through any number of future re-measurements.
+# The chain as of 2026-09-21 is five records deep —
+#
+#   019f9d5a-539d → 019f9fba-f1bc → 019fa04a-ceac
+#                 → 019fb1c9-7c16 → 019fb6b1-1c9a   (live head, 0.1.41)
+#
+# — and `just refresh-pins` re-resolves it on demand rather than leaving
+# the drift to be discovered by a red gate.
+#
+# `max_rank` is 1, lowered from 0, and the reason is a measurement
+# rather than a concession. Rank 0 is held by `019fbc9c-5c74`, a live
+# note that has never been superseded and is not part of this lineage;
+# it answers the query's literal words better, being specifically about
+# the `score` / `raw_score` split this query names. Demanding that the
+# lineage outrank it asserted something this query never claimed. What
+# the query DOES claim — that supersession holds under paraphrase — is
+# measured by the head surfacing at all and by the `no_hallucination`
+# check below; all four superseded ancestors were verified hidden from
+# the whole page at top_k 8 on 2026-09-21 (klams 0.1.52).
 type = "memory_id"
 value = "019fa04a-ceac"
-max_rank = 0
+max_rank = 1
 
 [[queries.checks]]
 # The superseded note's own phrasing; only it contains this string.

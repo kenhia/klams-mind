@@ -76,7 +76,8 @@ klams `memory_search` (deterministic — no LLM in the loop):
 - `no_hallucination` — a forbidden fragment is *absent* from all hits (precision)
 - `no_duplicates` — no two hits share a `content_hash`
 - `min_body_chars` — no hit's body (breadcrumb stripped) is below a floor
-- `memory_id` — a specific memory id is retrieved, optionally within `max_rank`
+- `memory_id` — a pinned memory — **or whatever it has been superseded
+  into** — is retrieved, optionally within `max_rank`
 
 Eval runs ask klams for **whole memory texts** (`full: true`), which
 klams documents as the path for "callers that genuinely want bodies in
@@ -119,6 +120,45 @@ Refreshing the baseline stays a deliberate act. Regenerate with:
 uv run klams-mind eval run evals/suites/homelab-retrieval.toml \
   --out evals/baselines/homelab-retrieval.md
 ```
+
+#### Pins name a lineage, not a leaf
+
+klams treats supersession as a first-class operation and **hides** the
+superseded record, so a pinned memory id is a ticking assertion by
+construction: it stops matching the moment the knowledge it named is
+re-measured. One of the suite's thirteen pins went off exactly that way
+(#2247), and the other twelve carried the same fuse.
+
+So a `memory_id` pin names a *lineage*. A hit satisfies it when it is
+the pinned memory, or when it descends from it through
+`memory_supersede` — the retriever resolves each hit's ancestry once (it
+is free for an ordinary hit, since `supersedes` rides on the search
+result), and the check stays a pure function of the page. `max_rank`
+keeps its teeth either way: a lineage that surfaces but loses its slot
+is still a failure.
+
+That makes a stale pin harmless, which is not the same as making it
+visible. The second half is a refresh recipe:
+
+```sh
+just refresh-pins                 # the homelab suite
+just refresh-pins --json
+uv run klams-mind eval pins <suite> --out drift.md
+```
+
+It re-resolves every pin against the live corpus and reports one of
+three states per pin — `current` (its own record is still live),
+`superseded` (a descendant surfaced; the report prints the whole
+lineage), or `absent` (no witness at all, which usually means the
+lineage left the page rather than that it moved). Ranking is reported
+separately and is deliberately **not** counted as drift: a live pin that
+has lost its slot is a retrieval regression, and folding the two
+together is how a suite ends up re-pinning to hide one. Exit code is
+**1** if any pin has drifted.
+
+It is not part of `just gate`, and cannot be: pin rot is a fact about
+klams' corpus, which moves with no commit in this repo and lives on
+kubs0 behind the tailnet.
 
 > The repo-root [.klamsignore](.klamsignore) keeps `evals/` out of the
 > klams corpus. Without it the suite is indexed into the very corpus it

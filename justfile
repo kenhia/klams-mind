@@ -43,6 +43,15 @@ gate:
 gate-live:
     uv run pytest -m live -v
 
+# Re-resolve the suite's memory_id pins against the live corpus and report
+# drift (klams-mind #2247). Deliberately outside `gate`: pin rot is a fact
+# about klams' corpus, which moves with no commit here, so a hosted runner
+# could not see it and a red gate would misattribute it. Exits 1 on drift.
+#
+# The pin-refresh recipe, against live klams (not part of the gate)
+refresh-pins *ARGS:
+    uv run klams-mind eval pins evals/suites/homelab-retrieval.toml {{ ARGS }}
+
 # Prove the plumbing against live klams + kvllm (not part of the gate).
 smoke *ARGS:
     uv run klams-mind smoke {{ ARGS }}
