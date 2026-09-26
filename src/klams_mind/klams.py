@@ -86,8 +86,9 @@ TESTED_KLAMS_MIN = (0, 1, 46)
 # Raised from 0.1.46 by `just gate-live` on kubs0, 2026-09-21: the
 # round-trip (compact envelope, `full`, `memory_get`) passed against
 # klams 0.1.52. Six versions of drift that nothing in this repo would
-# otherwise have reported.
-TESTED_KLAMS_MAX = (0, 1, 52)
+# otherwise have reported. Raised again to 0.1.55 on 2026-09-25 (sprint
+# 013): the round-trip passed, now including the paged `GET /v1/memories`.
+TESTED_KLAMS_MAX = (0, 1, 55)
 
 
 def parse_version(version: str) -> tuple[int, ...] | None:

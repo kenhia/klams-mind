@@ -162,8 +162,7 @@ the report states how many qualifying pairs the cap left unjudged.
   and this leg's brief forbids any live klams write. So
   `TESTED_KLAMS_MAX` stays at 0.1.52 while klams is at 0.1.55; the
   paged read itself is proven live by the two consolidation runs below.
-  (See Follow-ups for the overseer's ruling on this and why it is still
-  held.)
+  (Later run on the overseer's ruling; see Follow-ups.)
 
 ## What the first live runs found
 
@@ -233,13 +232,17 @@ its owner is kmon, not this judge — WI 3332.
   authority question is his.
 - **WI 3332** (kmon) — ruled "current state"; kmon supersedes its own
   observations. Routed to kmon's leg.
-- **`just gate-live` / `TESTED_KLAMS_MAX`** — the overseer cleared the run
-  on condition that the gate cleans up its marker memory. It does not:
-  `test_live_round_trip` calls `add_knowledge` and never deletes. In
-  practice every run since 2026-07-06 has hash-deduped onto one live
-  marker (`019f387b-8e04…`, author `klams-mind`), so a run writes no new
-  record — but the condition as stated is unmet, so the run is held for
-  the overseer. `TESTED_KLAMS_MAX` stays at 0.1.52 until it runs.
+- **`just gate-live` / `TESTED_KLAMS_MAX` — done.** The overseer first
+  cleared the run on condition that the gate cleans up its marker memory.
+  It does not (`test_live_round_trip` adds and never deletes), so the leg
+  stopped and reported. Every run since 2026-07-06 hash-dedupes onto one
+  live marker (`019f387b-8e04…`, author `klams-mind`), so the overseer
+  picked "run it". `just gate-live` on kubs0 **passed against klams
+  0.1.55**, including the new paged-read assertion; a read-only search
+  afterwards still found exactly one marker. `TESTED_KLAMS_MAX` bumped
+  0.1.52 → 0.1.55. Making the gate delete its marker (option c) was
+  **declined for now**: no change to the live tier's behaviour, since
+  deleting the dedup target would make every run write a fresh record.
 
 ## Not filed
 

@@ -291,7 +291,7 @@ range, and `smoke` warns on stderr — in both human and `--json` mode —
 when the klams it just health-checked falls outside it:
 
 ```
-warning: klams is 0.1.53, newer than the 0.1.46-0.1.52 this client was
+warning: klams is 0.1.56, newer than the 0.1.46-0.1.55 this client was
 tested against — run `just gate-live` to check the contract, then bump
 TESTED_KLAMS_MAX
 ```
