@@ -162,6 +162,8 @@ the report states how many qualifying pairs the cap left unjudged.
   and this leg's brief forbids any live klams write. So
   `TESTED_KLAMS_MAX` stays at 0.1.52 while klams is at 0.1.55; the
   paged read itself is proven live by the two consolidation runs below.
+  (See Follow-ups for the overseer's ruling on this and why it is still
+  held.)
 
 ## What the first live runs found
 
@@ -216,21 +218,28 @@ its owner is kmon, not this judge — WI 3332.
 - **D-4 Cap 60, best cosine first.** Measured above.
 - **D-5 No apply path at all** — not a flag defaulting off, no code. What
   apply needs is three decisions, none of them this repo's alone (WI 3331).
-- **D-6 kmon notes stay in scope.** Excluding them is one filter, but
-  whether their snapshots *should* be consolidated is kmon's call (WI
-  3332); until then the judge's verdicts on them are advice, as every
-  verdict here is.
+- **D-6 kmon notes stay in scope — no `kmon:observation` filter.** The
+  overseer ruled WI 3332 "current state" and routed it to kmon: kmon
+  will supersede its own previous observation for the same
+  `(kind, entity)`, so its snapshots stop piling up at the source, and
+  the crowding measured above goes with them. A filter here would only
+  have hidden the symptom.
 
 ## Follow-ups
 
 - **WI 3331** (klams-mind) — consolidation apply: authority
   (`manage` scope or a human), how to retire the second record given
-  `memory_supersede(id, text)`, and clusters.
-- **WI 3332** (kmon) — time series or current state for kmon's klams
-  observations.
-- Run `just gate-live` on kubs0 (writes one marker memory) and bump
-  `TESTED_KLAMS_MAX` to 0.1.55 — flagged to the overseer rather than done,
-  because this leg may not write to live klams.
+  `memory_supersede(id, text)`, and clusters. In Ken's lane: the
+  authority question is his.
+- **WI 3332** (kmon) — ruled "current state"; kmon supersedes its own
+  observations. Routed to kmon's leg.
+- **`just gate-live` / `TESTED_KLAMS_MAX`** — the overseer cleared the run
+  on condition that the gate cleans up its marker memory. It does not:
+  `test_live_round_trip` calls `add_knowledge` and never deletes. In
+  practice every run since 2026-07-06 has hash-deduped onto one live
+  marker (`019f387b-8e04…`, author `klams-mind`), so a run writes no new
+  record — but the condition as stated is unmet, so the run is held for
+  the overseer. `TESTED_KLAMS_MAX` stays at 0.1.52 until it runs.
 
 ## Not filed
 
