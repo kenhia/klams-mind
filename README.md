@@ -19,8 +19,9 @@ deliberately keeps out of its core:
   each other in meaning (not just trust-rank conflicts on the same
   fact) and propose dissents for human resolution in the klams
   viewport.
-- **Consolidation** — periodic merge/summarize/prune passes over aging
-  memories, guided by klams's decay signals.
+- **Consolidation** — find agent notes that say the same thing and
+  propose merges. Propose-only today; applying and scheduled runs come
+  later.
 - **Retrieval-quality evals** — TOML-defined query suites run against
   `memory_search`, so retrieval changes are measured, not vibes.
 
@@ -207,6 +208,31 @@ against the fact judged wrong (citing the conflicting one), under the
 klams-mind author. Dissents land as lowest-trust proposals and are
 resolved by a human in the viewport `/dissents` page.
 
+### Consolidation (propose-only)
+
+```sh
+uv run klams-mind consolidate run                       # markdown proposal on stdout
+uv run klams-mind consolidate run --json --out proposal.md
+uv run klams-mind consolidate run --threshold 0.9 --max-pairs 20 --top-k 30
+```
+
+Walks the whole live knowledge corpus through `GET /v1/memories`,
+keeps **agent-authored** notes (no `source_path`), and pairs each with
+its near neighbours from `memory_search` at raw cosine ≥ `--threshold`
+(default 0.85, klams' own `similar_existing` threshold). A
+refute-by-default judge rules each pair `duplicate` (keep one, retire
+the other), `merge` (with the merged replacement text) or `distinct`,
+best cosine first, capped at `--max-pairs` (default 60). The report
+states what the cap left unjudged and, per proposal, the
+`memory_supersede` call an apply step would make.
+
+There is **no `--apply`**: the command reads klams and never writes it.
+klams already collapses exact duplicates (same `content_hash`) at write
+and query time, so this targets only what that cannot see — see
+[sprint 013](sprints/013-consolidation-propose/sprint.md) for the
+measurements. A full run over today's corpus (~202k memories, 312
+curated, 55 pairs) takes about 8½ minutes, most of it in the judge.
+
 ### Configuration
 
 Defaults target the homelab (klams at `kubs0:7777`, kvllm at
@@ -226,7 +252,11 @@ register. (Homelab program korg:2440, sprint 010.)
 
 Note: klams exposes `register_author` / `memory_search` / `memory_add`
 only as MCP tools (Streamable HTTP at `{KLAMS_URL}/mcp`), not REST —
-the client wraps them via the official `mcp` SDK.
+the client wraps them via the official `mcp` SDK. The paged corpus
+read `GET /v1/memories` is REST (`list_memories` for one page,
+`walk_memories` for a range): klams caps a request at a 30-day window
+and 200 per page, so a walk steps back window by window and follows
+each window's cursor to its end.
 
 ### The klams search contract
 
@@ -261,7 +291,7 @@ range, and `smoke` warns on stderr — in both human and `--json` mode —
 when the klams it just health-checked falls outside it:
 
 ```
-warning: klams is 0.1.53, newer than the 0.1.46-0.1.52 this client was
+warning: klams is 0.1.56, newer than the 0.1.46-0.1.55 this client was
 tested against — run `just gate-live` to check the contract, then bump
 TESTED_KLAMS_MAX
 ```

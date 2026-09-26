@@ -1,8 +1,9 @@
 """Typed client for the klams memory service.
 
-`/healthz` is plain REST; `register_author`, `memory_search`, and
-`memory_add` exist only as MCP tools on `{base_url}/mcp` (Streamable
-HTTP, bearer auth). Contract source: klams repo
+`/healthz` and the paged corpus read `GET /v1/memories` are plain
+REST; `register_author`, `memory_search`, and `memory_add` exist only
+as MCP tools on `{base_url}/mcp` (Streamable HTTP). Both surfaces
+authenticate the declared `X-Homelab-Agent` name. Contract source: klams repo
 `crates/klams-mcp/src/tools/` and `crates/klams-types/`.
 
 Use `connect(cfg)` to get a session-backed client; tests inject a
@@ -12,7 +13,7 @@ Use `connect(cfg)` to get a session-backed client; tests inject a
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -85,8 +86,9 @@ TESTED_KLAMS_MIN = (0, 1, 46)
 # Raised from 0.1.46 by `just gate-live` on kubs0, 2026-09-21: the
 # round-trip (compact envelope, `full`, `memory_get`) passed against
 # klams 0.1.52. Six versions of drift that nothing in this repo would
-# otherwise have reported.
-TESTED_KLAMS_MAX = (0, 1, 52)
+# otherwise have reported. Raised again to 0.1.55 on 2026-09-25 (sprint
+# 013): the round-trip passed, now including the paged `GET /v1/memories`.
+TESTED_KLAMS_MAX = (0, 1, 55)
 
 
 def parse_version(version: str) -> tuple[int, ...] | None:
@@ -338,6 +340,26 @@ class SearchResponse(BaseModel):
     more: More
 
 
+class MemoryPage(BaseModel):
+    """One page of `GET /v1/memories`; the walk ends when `next_cursor`
+    is absent. klams adds a `state` to each item, which the memory
+    models ignore — a walk reads `live` unless asked otherwise."""
+
+    memories: list[Memory]
+    next_cursor: str | None = None
+
+
+# `GET /v1/memories` caps a request's span (`memories_max_window_days`,
+# klams default 30) and a page at 200 — so a corpus walk is windows of
+# pages, not one cursor.
+MEMORIES_WINDOW = timedelta(days=30)
+MEMORIES_PAGE_MAX = 200
+
+
+def _rfc3339(when: datetime) -> str:
+    return when.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 class RegisteredAuthor(BaseModel):
     author_id: UUID
     agent_name: str
@@ -381,6 +403,63 @@ class KlamsClient:
         if resp.status_code not in (200, 503):
             raise KlamsError(f"GET /healthz returned {resp.status_code}: {resp.text[:200]}")
         return HealthSnapshot.model_validate(resp.json())
+
+    async def list_memories(
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        kinds: Sequence[str] | None = None,
+        limit: int = MEMORIES_PAGE_MAX,
+        cursor: str | None = None,
+    ) -> MemoryPage:
+        """One page of the live corpus in `[since, until]`, newest first.
+
+        The span must fit in klams' window cap (`MEMORIES_WINDOW`); use
+        `walk_memories` for anything longer. The response strips vectors,
+        trust and decay by design, so this gives the *set* — similarity
+        still comes from search.
+        """
+        query: dict[str, str] = {"since": _rfc3339(since), "until": _rfc3339(until)}
+        if kinds is not None:
+            query["kinds"] = ",".join(kinds)
+        query["limit"] = str(limit)
+        if cursor is not None:
+            query["cursor"] = cursor
+        headers = {"X-Homelab-Agent": self._cfg.agent_name} if self._cfg.agent_name else {}
+        url = f"{self._cfg.base_url}/v1/memories"
+        if self._http is not None:
+            resp = await self._http.get(url, params=query, headers=headers)
+        else:
+            async with httpx.AsyncClient(timeout=30) as http:
+                resp = await http.get(url, params=query, headers=headers)
+        if resp.status_code != 200:
+            raise KlamsError(f"GET /v1/memories returned {resp.status_code}: {resp.text[:200]}")
+        return MemoryPage.model_validate(resp.json())
+
+    async def walk_memories(
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        kinds: Sequence[str] | None = None,
+    ) -> AsyncIterator[Memory]:
+        """Every live memory in `[since, until]`: newest window first,
+        each window paged to the end of its cursor."""
+        if since >= until:
+            raise ValueError(f"since ({since}) must be before until ({until})")
+        hi = until
+        while hi > since:
+            lo = max(since, hi - MEMORIES_WINDOW)
+            cursor: str | None = None
+            while True:
+                page = await self.list_memories(since=lo, until=hi, kinds=kinds, cursor=cursor)
+                for memory in page.memories:
+                    yield memory
+                cursor = page.next_cursor
+                if cursor is None:
+                    break
+            hi = lo
 
     async def register_author(
         self,

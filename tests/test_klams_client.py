@@ -12,6 +12,7 @@ runs it, and an unreachable klams fails that gate rather than skipping.
 import json
 import warnings
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -625,6 +626,21 @@ async def test_live_round_trip() -> None:
         #    A field present only on the compact shape would be useless
         #    to the suite, and this is the assertion that says so.
         assert any(h.memory.supersedes is not None for h in page)
+
+        # The paged corpus read (sprint 013, WI 272) — REST rather than
+        # MCP, and consolidation's only way to see the whole set. A
+        # two-second window around the marker keeps it to one page even
+        # while a scanner is writing hundreds of chunks a minute.
+        second = timedelta(seconds=1)
+        walked = [
+            m
+            async for m in client.walk_memories(
+                since=added.created_at - second,
+                until=added.created_at + second,
+                kinds=["knowledge"],
+            )
+        ]
+        assert any(m.id == added.id for m in walked)
 
     # Last, and a WARNING rather than an assertion (sprint 011 D-3, as
     # revised by the overseer). Everything above this line is the drift
