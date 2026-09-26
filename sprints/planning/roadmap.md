@@ -2,7 +2,7 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-09-12 (001–010 shipped; 008 went to the kprojects
+**Date:** 2026-09-25 (001–013 shipped; 013 was consolidation's propose half; 008 went to the kprojects
 harness chore, 009 to an unplanned klams contract migration and 010 to
 the homelab identity-header cutover, so consolidation slid to 011.
 Queue was renumbered 005+
@@ -92,41 +92,36 @@ and register it in krot") dissolved into a config row that already
 exists. See
 [010-identity-headers/sprint.md](../010-identity-headers/sprint.md).
 
-### 011 — Consolidation (next)
+### 011 — Live gate + version range (shipped) · 012 — supersedes chain (shipped)
 
-Decay-informed maintenance passes: merge near-duplicates, summarize
-stale clusters, propose prunes. Propose-first like extraction; uses
-klams paging (`GET /v1/memories`) and decay/trust signals.
+See their sprint directories. Consolidation slid again, to 013.
 
-**Two things to settle first**, both surfaced by 009 (see homelab-ai
-272's comment):
+### 013 — Consolidation, propose-only (shipped)
 
-1. **The paged corpus read does not exist yet.** `KlamsClient` has no
-   `GET /v1/memories`. Consolidation must *walk* the corpus, not sample
-   it through search — search is top-k and rank-ordered, the wrong
-   shape for "find every near-duplicate cluster".
-2. **klams now collapses some duplicates server-side, at query time.**
-   The compact hit carries `copies` ("how many duplicate copies this
-   hit absorbed"). Design against that rather than around it: part of
-   what this entry originally imagined may already be handled, and the
-   remainder may want a different cut.
+Proposal korg:3312. `KlamsClient` walks the corpus through
+`GET /v1/memories` (30-day windows × cursor pages), and
+`klams-mind consolidate run` proposes merges/duplicates among
+agent-authored knowledge — the only set klams' exact-hash `copies`
+leaves unhandled and the only set `memory_supersede` accepts. No apply
+path. See
+[013-consolidation-propose/sprint.md](../013-consolidation-propose/sprint.md).
 
-**What 006 learned:** the live corpus on kubs0 is *entirely*
-`knowledge` — zero `fact`/`event` memories (extraction writes
-knowledge; facts arrive via klams's Ansible/structured paths). Two
-consequences: (1) consolidation should target knowledge
-near-duplicates, since that is what actually exists; (2) contradiction
-detection has nothing live to run on until facts start landing — worth
-raising with klams whether extraction should also emit facts, or
-whether knowledge-vs-knowledge contradiction (which has no
-`dissent_propose` path) needs a different surface.
+### Next — Consolidation apply (blocked on decisions)
+
+WI 3331: authority to supersede other agents' notes, how to retire the
+second record of a pair, and clusters. kmon's WI 3332 decides whether
+its observation snapshots are in scope at all.
+
+**Still true from 006:** the live corpus is *entirely* `knowledge` —
+zero `fact`/`event` memories — so contradiction detection has nothing
+live to run on until facts start landing.
 
 ### Later / unscheduled
 
 - Usefulness feedback ("this helped") writer, paired with klams's
   decay-boost backlog item.
-- Scheduled runs (systemd timer on kubs0) once propose→apply loops are
-  trusted.
+- Scheduled consolidation runs (systemd timer on kubs0) once the
+  propose→apply loop is trusted (after WI 3331).
 - GHCP session-log extraction; other log sources.
 - Whatever the eval baseline demands (reranking experiments live here
   first, klams adopts what wins).

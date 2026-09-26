@@ -6,6 +6,8 @@ import asyncio
 import json
 import logging
 import socket
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -15,6 +17,11 @@ from pydantic import ValidationError
 
 from klams_mind import __version__
 from klams_mind.config import Config, load_config
+from klams_mind.consolidate.chain import build_merge_chain
+from klams_mind.consolidate.pairing import DEFAULT_THRESHOLD, curated, find_near_duplicates
+from klams_mind.consolidate.report import to_json as consolidate_to_json
+from klams_mind.consolidate.report import to_markdown as consolidate_to_markdown
+from klams_mind.consolidate.runner import ConsolidationResult, judge_pairs
 from klams_mind.contradict.chain import build_contradiction_chain
 from klams_mind.contradict.pairing import find_candidate_pairs
 from klams_mind.contradict.report import to_json as contradict_to_json
@@ -50,6 +57,12 @@ extract_app = typer.Typer(help="Distill durable facts from session transcripts i
 app.add_typer(extract_app, name="extract")
 contradict_app = typer.Typer(help="Find facts that contradict in meaning; propose dissents.")
 app.add_typer(contradict_app, name="contradict")
+consolidate_app = typer.Typer(help="Find agent notes that say the same thing; propose merges.")
+app.add_typer(consolidate_app, name="consolidate")
+
+# The oldest live memory on kubs0 was written 2026-05-25; a walk from here
+# covers the whole corpus. Homelab-specific on purpose (AGENTS.md).
+CORPUS_START = datetime(2026, 5, 1, tzinfo=UTC)
 
 
 class SmokeError(Exception):
@@ -611,3 +624,84 @@ def contradict_run(
         out.write_text(markdown)
         typer.echo(f"wrote {out}", err=True)
     typer.echo(contradict_to_json(result) if json_output else markdown)
+
+
+async def run_consolidate(
+    cfg: Config,
+    *,
+    threshold: float,
+    max_pairs: int,
+    top_k: int,
+    since: datetime = CORPUS_START,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    connect: Any = _connect,
+    resolve_model_name: Any = _resolve_model_name,
+    build_chat: Any = _build_chat,
+    chain_factory: Any = build_merge_chain,
+) -> ConsolidationResult:
+    """Walk the knowledge corpus, pair curated near-duplicates, judge a
+    capped number of them. Reads klams, never writes it."""
+    model_name = await resolve_model_name(cfg.model)
+    chain = chain_factory(build_chat(cfg.model.model_copy(update={"name": model_name})))
+    async with connect(cfg.klams) as client:
+        walked = 0
+        notes = []
+        async for memory in client.walk_memories(since=since, until=now(), kinds=["knowledge"]):
+            walked += 1
+            notes += curated([memory])
+        pairs = await find_near_duplicates(client, notes, threshold=threshold, top_k=top_k)
+    judged, failures = await judge_pairs(pairs, chain, max_pairs=max_pairs)
+    return ConsolidationResult(
+        walked=walked,
+        curated=len(notes),
+        threshold=threshold,
+        max_pairs=max_pairs,
+        candidates=len(pairs),
+        judged=judged,
+        judge_failures=failures,
+    )
+
+
+@consolidate_app.command("run")
+def consolidate_run(
+    threshold: Annotated[
+        float, typer.Option(help="Minimum raw cosine for a candidate pair (klams' own 0.85).")
+    ] = DEFAULT_THRESHOLD,
+    max_pairs: Annotated[
+        int, typer.Option(help="Cap on pairs sent to the model, best cosine first.")
+    ] = 60,
+    top_k: Annotated[
+        int, typer.Option(help="Search depth per note; scanner chunks crowd the top slots.")
+    ] = 30,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit the proposal as JSON on stdout.")
+    ] = False,
+    out: Annotated[
+        Path | None, typer.Option(help="Also write the markdown proposal to this file.")
+    ] = None,
+    config: Annotated[
+        Path | None, typer.Option(help="Config file (default: KLAMS_MIND_CONFIG).")
+    ] = None,
+    debug: Annotated[bool, typer.Option(help="Re-raise failures with full tracebacks.")] = False,
+) -> None:
+    """Propose consolidations of near-duplicate agent notes. Propose-only: no --apply."""
+    cfg = load_config(path=config)
+    try:
+        result = asyncio.run(
+            run_consolidate(cfg, threshold=threshold, max_pairs=max_pairs, top_k=top_k)
+        )
+    except Exception as exc:
+        if debug:
+            raise
+        typer.echo(f"consolidate: failed: {exc}", err=True)
+        typer.echo(
+            "check klams (KLAMS_URL), kvllm (kai:8000), and the X-Homelab-Agent identity",
+            err=True,
+        )
+        raise typer.Exit(1) from exc
+
+    markdown = consolidate_to_markdown(result)
+    if out is not None:
+        out.write_text(markdown)
+        typer.echo(f"wrote {out}", err=True)
+    typer.echo(consolidate_to_json(result) if json_output else markdown)
