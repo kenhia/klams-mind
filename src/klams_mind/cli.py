@@ -18,6 +18,13 @@ from pydantic import ValidationError
 from klams_mind import __version__
 from klams_mind.config import Config, load_config
 from klams_mind.consolidate.chain import build_merge_chain
+from klams_mind.consolidate.filing import (
+    FILE_CAP,
+    file_proposals,
+    read_ledger,
+    stale_notes,
+    triage,
+)
 from klams_mind.consolidate.pairing import DEFAULT_THRESHOLD, curated, find_near_duplicates
 from klams_mind.consolidate.report import to_json as consolidate_to_json
 from klams_mind.consolidate.report import to_markdown as consolidate_to_markdown
@@ -632,6 +639,8 @@ async def run_consolidate(
     threshold: float,
     max_pairs: int,
     top_k: int,
+    file: bool = False,
+    max_file: int = FILE_CAP,
     since: datetime = CORPUS_START,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     connect: Any = _connect,
@@ -639,8 +648,10 @@ async def run_consolidate(
     build_chat: Any = _build_chat,
     chain_factory: Any = build_merge_chain,
 ) -> ConsolidationResult:
-    """Walk the knowledge corpus, pair curated near-duplicates, judge a
-    capped number of them. Reads klams, never writes it."""
+    """Walk the knowledge corpus, pair curated near-duplicates the supersede
+    queue has not already answered, judge a capped number of them, and —
+    only with `file` — file up to `max_file` as supersede proposals.
+    Never resolves a proposal; a dry run writes nothing at all."""
     model_name = await resolve_model_name(cfg.model)
     chain = chain_factory(build_chat(cfg.model.model_copy(update={"name": model_name})))
     async with connect(cfg.klams) as client:
@@ -650,7 +661,15 @@ async def run_consolidate(
             walked += 1
             notes += curated([memory])
         pairs = await find_near_duplicates(client, notes, threshold=threshold, top_k=top_k)
-    judged, failures = await judge_pairs(pairs, chain, max_pairs=max_pairs)
+        ledger = await read_ledger(client)
+    to_judge, skipped = triage(pairs, ledger)
+    judged, failures = await judge_pairs(to_judge, chain, max_pairs=max_pairs)
+    filings = None
+    if file:
+        # A fresh session: the judge pass above runs for minutes.
+        async with connect(cfg.klams) as client:
+            filings = await file_proposals(client, judged, cap=max_file)
+    stale, settled = stale_notes(ledger, live={n.id for n in notes}, filings=filings or [])
     return ConsolidationResult(
         walked=walked,
         curated=len(notes),
@@ -659,6 +678,12 @@ async def run_consolidate(
         candidates=len(pairs),
         judged=judged,
         judge_failures=failures,
+        skipped=skipped,
+        filings=filings,
+        file_cap=max_file,
+        stale=stale,
+        stale_settled=settled,
+        ledger_truncated=ledger.truncated,
     )
 
 
@@ -673,6 +698,15 @@ def consolidate_run(
     top_k: Annotated[
         int, typer.Option(help="Search depth per note; scanner chunks crowd the top slots.")
     ] = 30,
+    file: Annotated[
+        bool,
+        typer.Option(
+            "--file", help="File proposals to klams' supersede queue (default: dry-run)."
+        ),
+    ] = False,
+    max_file: Annotated[
+        int, typer.Option(help="Cap on new proposals one run files, best first.")
+    ] = FILE_CAP,
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit the proposal as JSON on stdout.")
     ] = False,
@@ -684,11 +718,22 @@ def consolidate_run(
     ] = None,
     debug: Annotated[bool, typer.Option(help="Re-raise failures with full tracebacks.")] = False,
 ) -> None:
-    """Propose consolidations of near-duplicate agent notes. Propose-only: no --apply."""
+    """Propose consolidations of near-duplicate agent notes.
+
+    Dry-run by default; `--file` files them to klams' supersede queue for
+    an identity with `manage` to accept or reject. There is no --apply:
+    klams-mind never resolves its own proposals."""
     cfg = load_config(path=config)
     try:
         result = asyncio.run(
-            run_consolidate(cfg, threshold=threshold, max_pairs=max_pairs, top_k=top_k)
+            run_consolidate(
+                cfg,
+                threshold=threshold,
+                max_pairs=max_pairs,
+                top_k=top_k,
+                file=file,
+                max_file=max_file,
+            )
         )
     except Exception as exc:
         if debug:

@@ -20,8 +20,9 @@ deliberately keeps out of its core:
   fact) and propose dissents for human resolution in the klams
   viewport.
 - **Consolidation** — find agent notes that say the same thing and
-  propose merges. Propose-only today; applying and scheduled runs come
-  later.
+  file merge/duplicate proposals to klams' supersede queue, where an
+  identity with `manage` accepts or rejects them. klams-mind never
+  resolves its own proposals; scheduled runs come later.
 - **Retrieval-quality evals** — TOML-defined query suites run against
   `memory_search`, so retrieval changes are measured, not vibes.
 
@@ -208,12 +209,14 @@ against the fact judged wrong (citing the conflicting one), under the
 klams-mind author. Dissents land as lowest-trust proposals and are
 resolved by a human in the viewport `/dissents` page.
 
-### Consolidation (propose-only)
+### Consolidation
 
 ```sh
-uv run klams-mind consolidate run                       # markdown proposal on stdout
+uv run klams-mind consolidate run                       # dry run: markdown on stdout
 uv run klams-mind consolidate run --json --out proposal.md
 uv run klams-mind consolidate run --threshold 0.9 --max-pairs 20 --top-k 30
+uv run klams-mind consolidate run --file                # file up to 5 proposals
+uv run klams-mind consolidate run --file --max-file 2
 ```
 
 Walks the whole live knowledge corpus through `GET /v1/memories`,
@@ -224,14 +227,40 @@ refute-by-default judge rules each pair `duplicate` (keep one, retire
 the other), `merge` (with the merged replacement text) or `distinct`,
 best cosine first, capped at `--max-pairs` (default 60). The report
 states what the cap left unjudged and, per proposal, the
-`memory_supersede` call an apply step would make.
+`supersede_propose` arguments.
 
-There is **no `--apply`**: the command reads klams and never writes it.
+**Dry-run is the default.** `--file` files each actionable verdict to
+klams' supersede-proposal queue (klams ≥ 0.1.58) with
+`supersede_propose`, under the klams-mind identity, with a reason that
+quotes both notes so a reviewer can judge it without opening either.
+One run files at most `--max-file` new proposals (default 5). It does
+not file:
+
+- a pair already inside a **pending** proposal — skipped before the
+  judge, since a re-judged merge text would not dedupe;
+- a pair inside a **rejected** proposal — a rejection is an answer;
+- a second proposal touching a record already proposed in the same
+  run — deferred, since klams would only mark it `stale` on accepting
+  the first.
+
+Proposals klams marked **stale** (an overlapping sibling was accepted
+first) are re-detected from the live corpus against the survivor and
+judged ahead of everything else; the report says which were re-filed.
+
+**Resolving is not klams-mind's job, and it cannot.** klams-mind holds
+`read,write`; `supersede_proposal_resolve` needs `manage` (today
+`claude`, `ghcp`, `claude-duet`). Ken, or an agent he directs, reviews
+the queue with `supersede_proposals_list` and calls
+`supersede_proposal_resolve(proposal_ids=[…], decision="accept"|"reject")`.
+Accepting a duplicate retires the other note into the keeper; accepting
+a merge writes the merged text as a new memory replacing both.
+
 klams already collapses exact duplicates (same `content_hash`) at write
 and query time, so this targets only what that cannot see — see
 [sprint 013](sprints/013-consolidation-propose/sprint.md) for the
-measurements. A full run over today's corpus (~202k memories, 312
-curated, 55 pairs) takes about 8½ minutes, most of it in the judge.
+measurements and [sprint 014](sprints/014-supersede-propose/sprint.md)
+for filing. A full run over today's corpus takes about 10 minutes,
+most of it in the judge.
 
 ### Configuration
 
@@ -291,13 +320,15 @@ range, and `smoke` warns on stderr — in both human and `--json` mode —
 when the klams it just health-checked falls outside it:
 
 ```
-warning: klams is 0.1.56, newer than the 0.1.46-0.1.55 this client was
+warning: klams is 0.1.59, newer than the 0.1.58-0.1.58 this client was
 tested against — run `just gate-live` to check the contract, then bump
 TESTED_KLAMS_MAX
 ```
 
-The floor is not decoration: the compact envelope landed in klams
-0.1.46, so an *older* klams breaks this client as surely as a newer one.
+The floor is not decoration: the supersede-proposal queue that
+`consolidate run` reads landed in klams 0.1.58 (the compact envelope
+before it in 0.1.46), so an *older* klams breaks this client as surely
+as a newer one.
 
 The ceiling is maintained by `just gate-live`, which checks it **last,
 after its contract assertions have passed, and warns rather than

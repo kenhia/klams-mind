@@ -2,7 +2,7 @@
 
 **Status:** Active — this is the pointer document: the top entry under
 "Sprint queue" is the next sprint.  
-**Date:** 2026-09-25 (001–013 shipped; 013 was consolidation's propose half; 008 went to the kprojects
+**Date:** 2026-11-09 (001–014 shipped; 013 was consolidation's propose half, 014 files its proposals to klams' supersede queue; 008 went to the kprojects
 harness chore, 009 to an unplanned klams contract migration and 010 to
 the homelab identity-header cutover, so consolidation slid to 011.
 Queue was renumbered 005+
@@ -106,11 +106,13 @@ leaves unhandled and the only set `memory_supersede` accepts. No apply
 path. See
 [013-consolidation-propose/sprint.md](../013-consolidation-propose/sprint.md).
 
-### Next — Consolidation apply (blocked on decisions)
+### 014 — Consolidation files supersede proposals (shipped)
 
-WI 3331: authority to supersede other agents' notes, how to retire the
-second record of a pair, and clusters. kmon's WI 3332 decides whether
-its observation snapshots are in scope at all.
+Proposal korg:4430, WI 3331's klams-mind half. klams 058 gave
+consolidation a review queue (`supersede_propose` / `_list` /
+`_resolve`); `klams-mind consolidate run --file` files up to 5
+proposals a run and never resolves them. See
+[014-supersede-propose/sprint.md](../014-supersede-propose/sprint.md).
 
 **Still true from 006:** the live corpus is *entirely* `knowledge` —
 zero `fact`/`event` memories — so contradiction detection has nothing
@@ -121,7 +123,9 @@ live to run on until facts start landing.
 - Usefulness feedback ("this helped") writer, paired with klams's
   decay-boost backlog item.
 - Scheduled consolidation runs (systemd timer on kubs0) once the
-  propose→apply loop is trusted (after WI 3331).
+  propose→accept loop is trusted: both halves of WI 3331 have shipped,
+  so what is left is watching how the first filed proposals are
+  resolved.
 - GHCP session-log extraction; other log sources.
 - Whatever the eval baseline demands (reranking experiments live here
   first, klams adopts what wins).

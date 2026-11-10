@@ -606,19 +606,29 @@ async def test_live_round_trip() -> None:
         # sprint removed: supersession is terminal, so its state cannot
         # regress. The chain may grow past it; it can never un-supersede.
         superseded_id = "019fa04a-ceac-7253-9420-ea3a39cd0ef2"
-        hidden = await client.memory_get(superseded_id)
 
-        # 1. A superseded record is HIDDEN, not deleted — memory_get
-        #    still serves it. Without this the ancestry walk dead-ends.
+        # 1. A superseded record is HIDDEN, not deleted. Since klams
+        #    0.1.58 (WI 4331) `memory_get` refuses it, and REST
+        #    `GET /memory/knowledge/{id}` is the read that still serves it
+        #    (058 D1) — so that is what the ancestry walk uses (sprint 014).
+        with pytest.raises(KlamsError) as refused:
+            await client.memory_get(superseded_id)
+        assert refused.value.error_code == "NOT_FOUND"
+        hidden = await client.knowledge_lineage(superseded_id)
         assert str(hidden.id) == superseded_id
         # 2. It names both neighbours. `supersedes` is what the walk
         #    follows backward; `superseded_by` is what proves it is dead.
         assert hidden.superseded_by is not None
         assert hidden.supersedes is not None
-        # 3. And it is genuinely absent from search, which is the
-        #    invariant the eval suite's paraphrase query exists to prove.
+        # 3. And it is genuinely absent from search. The query reaches the
+        #    same lineage through a different subject (the 0.1.41 head's
+        #    tags fix) and must NOT repeat the eval suite's query: this
+        #    file is scanned into klams, and klams' lexical arm surfaces
+        #    any chunk containing every query token, so a verbatim copy
+        #    here outranked the very note that eval check pins (sprint
+        #    014).
         page = await client.memory_search_full(
-            "klams memory_search score field behavior ranking", top_k=8
+            "tags filter starved page fixed pushdown into Qdrant", top_k=8
         )
         assert all(str(h.memory.id) != superseded_id for h in page)
         # 4. `supersedes` rides on a search hit too, in the `full`

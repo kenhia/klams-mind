@@ -183,6 +183,10 @@ class KlamsRetriever:
     async def _parent_of(self, memory_id: str) -> str | None:
         """One hop back, cached. A record klams will not serve ends the walk.
 
+        Every ancestor is a superseded record, and since klams 0.1.58
+        `memory_get` refuses those (WI 4331), so the hop reads REST
+        `GET /memory/knowledge/{id}`, which still serves them (058 D1).
+
         Defensive at the boundary on purpose: a superseded ancestor can
         be hard-deleted or fall outside this identity's read scope, and
         an eval that dies on that measures nothing — which is strictly
@@ -191,7 +195,7 @@ class KlamsRetriever:
         if memory_id in self._parent:
             return self._parent[memory_id]
         try:
-            memory = await self._client.memory_get(memory_id)
+            memory = await self._client.knowledge_lineage(memory_id)
         except Exception:
             self._parent[memory_id] = None
             return None

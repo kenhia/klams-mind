@@ -1,9 +1,9 @@
 """Render a ConsolidationResult as markdown or JSON (mirrors contradict.report).
 
-Markdown is the review surface: the bounds the run worked within, then
-each proposal with both notes, the verdict, and the call an apply step
-would make — so accepting or rejecting one never requires re-querying
-klams.
+Markdown is the review surface: the bounds the run worked within, what
+was filed to klams' supersede queue (or would be, on a dry run), then
+each proposal with both notes, the verdict, and the `supersede_propose`
+arguments — so judging one never requires re-querying klams.
 """
 
 import json
@@ -26,15 +26,57 @@ def _render(p: Proposal) -> list[str]:
             f"  - {label} [{note.id}] {note.created_at:%Y-%m-%d} by {note.author.agent_name}"
         )
         lines += _quote(note.text)
-    if p.status == "merge":
+    if p.status in ("merge", "duplicate"):
+        text = ", text=…" if p.status == "merge" else ""
         lines.append(
-            f'  - apply: `memory_supersede(id="{p.keep_id}", text=…)`, retire `{p.retire_id}`'
+            f'  - propose: `supersede_propose(keeper_id="{p.keep_id}", '
+            f'retire_ids=["{p.retire_id}"]{text})`'
         )
+    if p.status == "merge":
         lines.append("  - merged text:")
         lines += _quote(p.text or "")
-    elif p.status == "duplicate":
-        lines.append(f"  - apply: keep `{p.keep_id}`, retire `{p.retire_id}`")
     return lines
+
+
+def _queue_lines(result: ConsolidationResult) -> list[str]:
+    lines: list[str] = []
+    if result.filings is not None:
+        lines += ["", "## Filed", ""]
+        if not result.filings:
+            lines.append("- nothing actionable to file")
+        for f in result.filings:
+            p = f.proposal
+            ref = f" → proposal `{f.proposal_id}`" if f.proposal_id else ""
+            detail = f" ({f.detail})" if f.detail else ""
+            lines.append(
+                f"- {f.outcome}: {p.status} keep `{p.keep_id}` retire `{p.retire_id}`{ref}{detail}"
+            )
+    if result.skipped:
+        lines += ["", "## Already in the queue", ""]
+        lines += [
+            f"- {s.status} `{s.proposal_id}`: `{s.pair.a.id}` + `{s.pair.b.id}`"
+            for s in result.skipped
+        ]
+    if result.stale or result.stale_settled:
+        lines += ["", "## Stale proposals", ""]
+        lines += [f"- `{n.proposal_id}` {n.outcome} — {n.detail}" for n in result.stale]
+        if result.stale_settled:
+            lines.append(f"- {result.stale_settled} settled (no retiree left live)")
+    return lines
+
+
+def _mode_line(result: ConsolidationResult) -> str:
+    if result.filings is None:
+        return (
+            "**Dry run** — nothing filed. `--file` files up to "
+            f"{result.file_cap} to klams' supersede queue."
+        )
+    filed = sum(f.outcome == "filed" for f in result.filings)
+    return (
+        f"**Filed {filed} proposal(s)** (cap {result.file_cap}) to klams' supersede queue, "
+        "pending review. klams-mind never resolves them: an identity with `manage` "
+        "accepts or rejects with `supersede_proposal_resolve`."
+    )
 
 
 def to_markdown(result: ConsolidationResult) -> str:
@@ -44,7 +86,7 @@ def to_markdown(result: ConsolidationResult) -> str:
     lines = [
         "# Consolidation proposal",
         "",
-        "**Propose-only** — nothing here has been applied to klams.",
+        _mode_line(result),
         "",
         f"- {result.walked} memories walked, {result.curated} curated (agent-authored knowledge)",
         f"- {result.candidates} pair(s) at cosine ≥ {result.threshold}; "
@@ -52,6 +94,14 @@ def to_markdown(result: ConsolidationResult) -> str:
         f"{result.unjudged} left unjudged",
         f"- verdicts: {counts}{failures}",
     ]
+    if result.skipped:
+        lines.append(f"- {len(result.skipped)} pair(s) skipped: already pending or rejected")
+    if result.ledger_truncated:
+        lines.append(
+            f"- warning: the {', '.join(result.ledger_truncated)} proposal list hit klams' "
+            "limit, so some already-answered pairs may have been judged again"
+        )
+    lines += _queue_lines(result)
     for status in _ORDER:
         if by[status]:
             lines += ["", f"## {status.capitalize()}", ""]
@@ -73,6 +123,34 @@ def to_json(result: ConsolidationResult) -> str:
             "candidates": result.candidates,
             "unjudged": result.unjudged,
             "judge_failures": result.judge_failures,
+            "file_cap": result.file_cap,
+            "filings": None
+            if result.filings is None
+            else [
+                {
+                    "outcome": f.outcome,
+                    "proposal_id": f.proposal_id,
+                    "detail": f.detail,
+                    "keep_id": f.proposal.keep_id,
+                    "retire_id": f.proposal.retire_id,
+                }
+                for f in result.filings
+            ],
+            "skipped": [
+                {
+                    "status": s.status,
+                    "proposal_id": s.proposal_id,
+                    "a": str(s.pair.a.id),
+                    "b": str(s.pair.b.id),
+                }
+                for s in result.skipped
+            ],
+            "stale": [
+                {"proposal_id": n.proposal_id, "outcome": n.outcome, "detail": n.detail}
+                for n in result.stale
+            ],
+            "stale_settled": result.stale_settled,
+            "ledger_truncated": list(result.ledger_truncated),
             "proposals": [
                 {
                     "status": p.status,

@@ -1,20 +1,22 @@
 """Judge candidate pairs into consolidation proposals.
 
-Propose-only by construction: this module takes no klams client and so
-cannot write. A proposal names what an apply step would do —
-`memory_supersede(id=keep, text=merged)` for a merge, and the record to
-retire in both cases — and stops there. How apply retires the second
-record is not decided here (sprint 013's follow-ups).
+The judge cannot write: this module takes no klams client. A proposal
+names a keeper, the record to retire, and (for a merge) the replacement
+text — exactly the arguments of klams' `supersede_propose`. Filing them
+is `consolidate.filing`'s job, and resolving them is never klams-mind's.
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from langchain_core.runnables import Runnable
 
 from klams_mind.consolidate.chain import JudgeParseError, MergeVerdict, parse_verdict
 from klams_mind.consolidate.pairing import CandidatePair
 from klams_mind.klams import KnowledgeMemory
+
+if TYPE_CHECKING:
+    from klams_mind.consolidate.filing import Filing, Skipped, StaleNote
 
 Status = Literal["merge", "duplicate", "unactionable", "distinct"]
 
@@ -42,10 +44,19 @@ class ConsolidationResult:
     candidates: int
     judged: list[Proposal] = field(default_factory=list)
     judge_failures: list[str] = field(default_factory=list)
+    # Pairs the supersede queue already answers (pending or rejected).
+    skipped: list["Skipped"] = field(default_factory=list)
+    # None on a dry run; what `--file` did otherwise.
+    filings: "list[Filing] | None" = None
+    file_cap: int = 0
+    stale: list["StaleNote"] = field(default_factory=list)
+    stale_settled: int = 0
+    # Proposal lists that came back at klams' limit and may be incomplete.
+    ledger_truncated: tuple[str, ...] = ()
 
     @property
     def unjudged(self) -> int:
-        return self.candidates - len(self.judged) - len(self.judge_failures)
+        return self.candidates - len(self.skipped) - len(self.judged) - len(self.judge_failures)
 
 
 async def judge_pairs(

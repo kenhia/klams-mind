@@ -1,5 +1,6 @@
-"""Consolidation, propose-only (sprint 013, WI 272): curate, pair through
-klams search, judge with the model, report — and never write to klams."""
+"""Consolidation (sprint 013, WI 272; filing added in 014, WI 3331): curate,
+pair through klams search, judge with the model, report — and on a dry run
+never write to klams."""
 
 import json
 from typing import Any
@@ -42,14 +43,17 @@ C = agent_note("c0", "klams listens on 127.0.0.1:7777 and the tailnet IP.")
 
 
 class SearchRouter:
-    """Fakes `memory_search` (full), returning canned hits per query."""
+    """Fakes `memory_search` (full), returning canned hits per query, and an
+    empty supersede queue. Any other tool — every write — fails the test."""
 
     def __init__(self, by_query: dict[str, list[dict[str, Any]]]) -> None:
         self.by_query = by_query
         self.calls: list[dict[str, Any]] = []
 
     async def __call__(self, name: str, args: dict[str, Any]) -> CallToolResult:
-        assert name == "memory_search", f"consolidation must only search, not call {name}"
+        if name == "supersede_proposals_list":
+            return CallToolResult(content=[TextContent(type="text", text='{"proposals": []}')])
+        assert name == "memory_search", f"a dry run must only read, not call {name}"
         self.calls.append(args)
         hits = self.by_query.get(args["query"], [])
         return CallToolResult(content=[TextContent(type="text", text=json.dumps(hits))])
@@ -183,14 +187,28 @@ async def canned() -> ConsolidationResult:
     )
 
 
-async def test_markdown_states_bounds_and_the_apply_call() -> None:
+async def test_markdown_states_bounds_and_the_propose_call() -> None:
     md = to_markdown(await canned())
-    assert "**Propose-only**" in md
+    assert "**Dry run** — nothing filed" in md
     assert "1000 memories walked, 3 curated" in md
     assert "5 pair(s) at cosine ≥ 0.85; 2 judged (cap 2), 3 left unjudged" in md
-    assert f'memory_supersede(id="{A.id}", text=…)' in md
-    assert f"retire `{B.id}`" in md
+    assert f'supersede_propose(keeper_id="{A.id}", retire_ids=["{B.id}"], text=…)' in md
     assert "> merged" in md
+    assert "## Filed" not in md
+
+
+async def test_markdown_reports_what_was_filed_and_who_resolves_it() -> None:
+    from klams_mind.consolidate.filing import Filing
+
+    result = await canned()
+    result.file_cap = 5
+    result.filings = [Filing(result.judged[0], "filed", "01980000-0000-7000-8000-0000000000f1")]
+    md = to_markdown(result)
+    assert "**Filed 1 proposal(s)** (cap 5)" in md
+    assert "supersede_proposal_resolve" in md
+    assert "filed: merge" in md and "0000000000f1" in md
+    data = json.loads(to_json(result))
+    assert data["filings"][0]["outcome"] == "filed"
 
 
 async def test_json_carries_every_proposal() -> None:
@@ -222,6 +240,24 @@ def test_cli_prints_the_proposal_and_threads_bounds(monkeypatch: Any) -> None:
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["max_pairs"] == 4
     assert (seen["threshold"], seen["max_pairs"], seen["top_k"]) == (0.9, 4, 30)
+    assert (seen["file"], seen["max_file"]) == (False, 5)
+
+
+def test_cli_threads_file_and_its_cap(monkeypatch: Any) -> None:
+    from typer.testing import CliRunner
+
+    from klams_mind.cli import app
+
+    seen: dict[str, Any] = {}
+
+    async def fake_run(cfg: Any, **kw: Any) -> ConsolidationResult:
+        seen.update(kw)
+        return ConsolidationResult(walked=0, curated=0, threshold=0.85, max_pairs=60, candidates=0)
+
+    monkeypatch.setattr("klams_mind.cli.run_consolidate", fake_run)
+    result = CliRunner().invoke(app, ["consolidate", "run", "--file", "--max-file", "2"])
+    assert result.exit_code == 0, result.output
+    assert (seen["file"], seen["max_file"]) == (True, 2)
 
 
 def test_cli_has_no_apply_flag() -> None:
@@ -270,3 +306,50 @@ async def test_run_consolidate_walks_curates_pairs_and_judges(monkeypatch: Any) 
     assert (result.walked, result.curated, result.candidates) == (3, 2, 1)
     [p] = result.judged
     assert (p.status, p.keep_id, p.retire_id) == ("duplicate", str(A.id), str(B.id))
+    assert result.filings is None
+
+
+async def test_run_consolidate_files_only_with_file(monkeypatch: Any) -> None:
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+
+    import httpx
+
+    from klams_mind.cli import run_consolidate
+    from klams_mind.config import Config
+    from tests.test_consolidate_filing import Queue
+
+    page = [json.loads(m.model_dump_json()) for m in (A, B)]
+    rest = httpx.MockTransport(lambda req: httpx.Response(200, json={"memories": page}))
+    router = SearchRouter({A.text: [hit(B, 0.9)], B.text: [hit(A, 0.9)]})
+    queue = Queue()
+    sessions = [
+        KlamsClient(KlamsConfig(), tool_caller=router, http=httpx.AsyncClient(transport=rest)),
+        KlamsClient(KlamsConfig(), tool_caller=queue),
+    ]
+
+    @asynccontextmanager
+    async def fake_connect(_cfg: Any) -> Any:
+        yield sessions.pop(0)
+
+    async def fake_resolve(_cfg: Any) -> str:
+        return "served-model"
+
+    chat = FakeListChatModel(responses=[reply(verdict="duplicate", keep="b", reason="same")])
+    result = await run_consolidate(
+        Config(),
+        threshold=0.85,
+        max_pairs=25,
+        top_k=30,
+        file=True,
+        max_file=3,
+        since=datetime(2026, 9, 1, tzinfo=UTC),
+        now=lambda: datetime(2026, 9, 26, tzinfo=UTC),
+        connect=fake_connect,
+        resolve_model_name=fake_resolve,
+        build_chat=lambda cfg: chat,
+    )
+    assert [f.outcome for f in result.filings or []] == ["filed"]
+    assert queue.filed[0]["keeper_id"] == str(B.id)
+    assert queue.filed[0]["retire_ids"] == [str(A.id)]
+    assert result.file_cap == 3

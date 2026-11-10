@@ -3,6 +3,7 @@
 import json
 from typing import Literal
 
+import httpx
 from mcp.types import CallToolResult, TextContent
 
 from klams_mind.config import KlamsConfig
@@ -191,13 +192,18 @@ async def test_queries_default_to_expect_pass() -> None:
 # --- supersession lineage (WI 2247, sprint 012) ----------------------------
 #
 # klams returns `supersedes` on a hit (backward: "I replaced X") in both
-# envelopes, and `memory_get` on a superseded record still resolves — so
-# the whole lineage is reachable by walking backward from each hit. The
-# retriever does that walk once, so `evaluate_check` stays pure.
+# envelopes, so the whole lineage is reachable by walking backward from
+# each hit. The retriever does that walk once, so `evaluate_check` stays
+# pure. Since klams 0.1.58 (sprint 058, WI 4331) `memory_get` answers
+# NOT_FOUND for a superseded record, so the walk reads ancestors through
+# REST `GET /memory/knowledge/{id}`, which 058 D1 keeps serving them
+# (sprint 014).
 
 
 class ScriptedCaller:
-    """Answers each tool call from a per-tool script, recording calls."""
+    """Answers `memory_search` over MCP and ancestor reads over REST, from
+    a script, recording both. `memory_get` refuses a superseded record, as
+    klams has since 0.1.58."""
 
     def __init__(self, search: object, gets: dict[str, object]) -> None:
         self.search = search
@@ -208,13 +214,23 @@ class ScriptedCaller:
         self.calls.append((name, args))
         if name == "memory_search":
             return tool_ok(self.search)
-        payload = self.gets.get(str(args["id"]))
+        return CallToolResult(
+            isError=True,
+            content=[TextContent(type="text", text="no live memory")],
+            _meta={"error_code": "NOT_FOUND"},
+        )
+
+    def _rest(self, request: httpx.Request) -> httpx.Response:
+        mid = request.url.path.rsplit("/", 1)[-1]
+        self.calls.append(("knowledge_get", {"id": mid}))
+        payload = self.gets.get(mid)
         if payload is None:
-            return CallToolResult(
-                isError=True,
-                content=[TextContent(type="text", text="not found")],
-            )
-        return tool_ok(payload)
+            return httpx.Response(404, json={"error": "not found"})
+        return httpx.Response(200, json=payload)
+
+    def client(self) -> KlamsClient:
+        http = httpx.AsyncClient(transport=httpx.MockTransport(self._rest))
+        return KlamsClient(KlamsConfig(), tool_caller=self, http=http)
 
 
 def knowledge(mid: str, *, supersedes: str | None = None, text: str = "note") -> dict:
@@ -235,14 +251,14 @@ async def test_retriever_walks_the_supersedes_chain_into_ancestry() -> None:
         search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)}],
         gets={MID: knowledge(MID, supersedes=ROOT), ROOT: knowledge(ROOT)},
     )
-    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+    retr = KlamsRetriever(caller.client())
 
     (item,) = await retr.search("q", top_k=5)
 
     assert item.memory_id == HEAD
     # Nearest ancestor first — the pin may name any depth of the chain.
     assert item.ancestry == (MID, ROOT)
-    assert [c[0] for c in caller.calls] == ["memory_search", "memory_get", "memory_get"]
+    assert [c[0] for c in caller.calls] == ["memory_search", "knowledge_get", "knowledge_get"]
 
 
 async def test_retriever_leaves_ancestry_empty_for_an_ordinary_hit() -> None:
@@ -250,7 +266,7 @@ async def test_retriever_leaves_ancestry_empty_for_an_ordinary_hit() -> None:
     caller = ScriptedCaller(
         search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD)}], gets={}
     )
-    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+    retr = KlamsRetriever(caller.client())
 
     (item,) = await retr.search("q", top_k=5)
 
@@ -266,7 +282,7 @@ async def test_retriever_stops_at_an_unreadable_ancestor_without_failing() -> No
         search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)}],
         gets={},
     )
-    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+    retr = KlamsRetriever(caller.client())
 
     (item,) = await retr.search("q", top_k=5)
 
@@ -278,7 +294,7 @@ async def test_retriever_does_not_loop_on_a_cyclic_chain() -> None:
         search=[{"score": 0.9, "source_rank": 0, "memory": knowledge(HEAD, supersedes=MID)}],
         gets={MID: knowledge(MID, supersedes=HEAD)},
     )
-    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+    retr = KlamsRetriever(caller.client())
 
     (item,) = await retr.search("q", top_k=5)
 
@@ -294,9 +310,9 @@ async def test_retriever_resolves_each_ancestor_once_across_hits() -> None:
         ],
         gets={MID: knowledge(MID, supersedes=ROOT), ROOT: knowledge(ROOT)},
     )
-    retr = KlamsRetriever(KlamsClient(KlamsConfig(), tool_caller=caller))
+    retr = KlamsRetriever(caller.client())
 
     items = await retr.search("q", top_k=5)
 
     assert [i.ancestry for i in items] == [(MID, ROOT), (MID, ROOT)]
-    assert [c[0] for c in caller.calls].count("memory_get") == 2
+    assert [c[0] for c in caller.calls].count("knowledge_get") == 2
