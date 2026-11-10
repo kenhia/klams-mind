@@ -620,10 +620,15 @@ async def test_live_round_trip() -> None:
         #    follows backward; `superseded_by` is what proves it is dead.
         assert hidden.superseded_by is not None
         assert hidden.supersedes is not None
-        # 3. And it is genuinely absent from search, which is the
-        #    invariant the eval suite's paraphrase query exists to prove.
+        # 3. And it is genuinely absent from search. The query reaches the
+        #    same lineage through a different subject (the 0.1.41 head's
+        #    tags fix) and must NOT repeat the eval suite's query: this
+        #    file is scanned into klams, and klams' lexical arm surfaces
+        #    any chunk containing every query token, so a verbatim copy
+        #    here outranked the very note that eval check pins (sprint
+        #    014).
         page = await client.memory_search_full(
-            "klams memory_search score field behavior ranking", top_k=8
+            "tags filter starved page fixed pushdown into Qdrant", top_k=8
         )
         assert all(str(h.memory.id) != superseded_id for h in page)
         # 4. `supersedes` rides on a search hit too, in the `full`

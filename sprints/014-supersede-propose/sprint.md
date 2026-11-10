@@ -175,23 +175,48 @@ repo, both fixed mechanically, both proven by that gate:
   0.1.58's `memory_get` behaviour. README's example was updated to
   match.
 
-## Finding for the overseer (not filed)
+## The eval suite back to 27/27 (overseer ruling)
 
-**The suite's one remaining failure is a ranking question, and it is
-partly self-inflicted.**
-- The query is `klams memory_search score field behavior ranking`, with
-  `max_rank 1`. The lineage now resolves at rank 2.
-- Rank 1 is a scanner chunk of this repo's own
-  `tests/test_klams_client.py`. Since sprint 012 the live round-trip
-  quotes the query verbatim, and the scanner indexed the file.
-- Fixing it means choosing one of two:
-  - rephrase the live test's query, which changes what the contract
-    test searches for;
-  - relax the check's `max_rank`, which changes the eval's bar.
+The lineage repair left the suite at 26/27, failing for a reason this
+repo caused.
 
-Either is a decision about what the suite asserts, not a mechanical
-repair. It was invisible before this sprint because the check failed
-earlier, as "absent".
+- **The check.** The score-field paraphrase query, with `max_rank 1`,
+  pins the lineage that `019fa04a-ceac` belongs to. The lineage now
+  resolved, but at rank 2.
+- **What sat at rank 1.** A scanner chunk of this repo's own
+  `tests/test_klams_client.py`. Since sprint 012 the live round-trip had
+  searched with the eval's query verbatim.
+- **Why it ranked.** klams' lexical arm (0.1.37) surfaces any chunk
+  containing every query token, so the fixture competed with the very
+  note the check pins.
+
+**Ruling (overseer):** rephrase the test's query. Do not loosen
+`max_rank`, which is doing its job; the fixture was polluting the
+corpus.
+
+- **The new query** reaches the same lineage through the 0.1.41 head's
+  other subject, the tags-filter fix, and shares none of the eval
+  query's distinctive tokens. Measured live before the change, it
+  returns the head `019fb6b1` at rank 0 with `supersedes` set. That is
+  what the round-trip asserts.
+- **Re-index.** A comment at the call site says why the query must never
+  copy an eval query. The scanner re-indexes this checkout hourly, so
+  the old chunk was flushed by starting `klams-scanner.service` by hand.
+- **This record.** It names the eval query by description rather than
+  quoting it, so the record does not become the next polluter.
+
+**Result, measured live on kubs0 on 2026-11-10:**
+
+- **The scanner run** (03:08:53–03:09:00 UTC) cleared 52 stale chunks of
+  `tests/test_klams_client.py` and re-indexed the file. The embed queue
+  then drained to 0.
+- **The suite:** `eval run homelab-retrieval.toml` exits 0 at **27/27**,
+  with no regressions.
+- **The pinned check** now reads `019fa04a-ceac (superseded — now
+  019fb6b1-1c9a) at rank 1`, and the test-file chunk has left the top
+  of that query's results.
+- **The gates:** `just gate` and `just gate-live` are both green on the
+  new query.
 
 ## Not done here
 
