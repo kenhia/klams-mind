@@ -82,13 +82,18 @@ class HealthSnapshot(BaseModel):
 # is the failure #2249 exists to stop. The contract assertions in the
 # round-trip are the drift signal; this pair only records how far
 # anyone has re-proved them.
-TESTED_KLAMS_MIN = (0, 1, 46)
+# Raised from 0.1.46 to 0.1.58 by sprint 014: `consolidate run` reads the
+# supersede-proposal queue, which klams added in 0.1.58, and the round-trip
+# now asserts 0.1.58's `memory_get` refusing a superseded record.
+TESTED_KLAMS_MIN = (0, 1, 58)
 # Raised from 0.1.46 by `just gate-live` on kubs0, 2026-09-21: the
 # round-trip (compact envelope, `full`, `memory_get`) passed against
 # klams 0.1.52. Six versions of drift that nothing in this repo would
 # otherwise have reported. Raised again to 0.1.55 on 2026-09-25 (sprint
 # 013): the round-trip passed, now including the paged `GET /v1/memories`.
-TESTED_KLAMS_MAX = (0, 1, 55)
+# Raised to 0.1.58 on 2026-11-09 (sprint 014), after the lineage read moved
+# to REST because 0.1.58's `memory_get` hides superseded records.
+TESTED_KLAMS_MAX = (0, 1, 58)
 
 
 def parse_version(version: str) -> tuple[int, ...] | None:
@@ -378,6 +383,63 @@ class DissentProposed(BaseModel):
     deduped: bool
 
 
+class KnowledgeLineage(BaseModel):
+    """The lineage links of one knowledge record, as REST serves them.
+
+    `GET /memory/knowledge/{id}` returns a record whatever its state —
+    klams 058 D1 kept it that way for restore tooling — and it is the only
+    read that still serves a superseded one: since klams 0.1.58
+    `memory_get` answers NOT_FOUND for it (WI 4331).
+    """
+
+    id: UUID
+    supersedes: UUID | None = None
+    superseded_by: UUID | None = None
+
+
+class SupersedeProposal(BaseModel):
+    """One row of klams' supersede-proposal queue (klams 058, WI 3331).
+
+    `keeper_id` survives; each of `retire_ids` is retired into it. With
+    `text`, acceptance writes the merged text as a new memory that
+    supersedes the keeper. `status` moves pending → accepted | rejected |
+    stale, and only an identity with `manage` moves it.
+    """
+
+    id: UUID
+    author_id: UUID
+    keeper_id: UUID
+    retire_ids: list[UUID]
+    text: str | None = None
+    reason: str
+    status: Literal["pending", "accepted", "rejected", "stale"]
+    submission_count: int
+    submitted_at: datetime
+    last_seen_at: datetime
+    resolved_at: datetime | None = None
+    resolved_by_author_id: UUID | None = None
+    result_memory_id: UUID | None = None
+    resolution_note: str | None = None
+
+    @property
+    def ids(self) -> set[UUID]:
+        """Every record the proposal touches, keeper included."""
+        return {self.keeper_id, *self.retire_ids}
+
+
+class SupersedeProposed(BaseModel):
+    """Result of `supersede_propose`. `deduped` is True when an identical
+    pending proposal (same keeper, retire set and text) already existed
+    and klams bumped its `submission_count` instead."""
+
+    proposal: SupersedeProposal
+    deduped: bool
+
+
+class _ProposalList(BaseModel):
+    proposals: list[SupersedeProposal]
+
+
 # --- client -------------------------------------------------------------------
 
 
@@ -460,6 +522,22 @@ class KlamsClient:
                 if cursor is None:
                     break
             hi = lo
+
+    async def knowledge_lineage(self, memory_id: str) -> KnowledgeLineage:
+        """Read a knowledge record's `supersedes`/`superseded_by`, even
+        when it is superseded (REST; `memory_get` hides it since 0.1.58)."""
+        headers = {"X-Homelab-Agent": self._cfg.agent_name} if self._cfg.agent_name else {}
+        url = f"{self._cfg.base_url}/memory/knowledge/{memory_id}"
+        if self._http is not None:
+            resp = await self._http.get(url, headers=headers)
+        else:
+            async with httpx.AsyncClient(timeout=10) as http:
+                resp = await http.get(url, headers=headers)
+        if resp.status_code != 200:
+            raise KlamsError(
+                f"GET /memory/knowledge/{memory_id} returned {resp.status_code}: {resp.text[:200]}"
+            )
+        return KnowledgeLineage.model_validate(resp.json())
 
     async def register_author(
         self,
@@ -605,17 +683,72 @@ class KlamsClient:
             args["contradicting_memory_id"] = contradicting_memory_id
         return DissentProposed.model_validate(await self._call("dissent_propose", args))
 
+    async def supersede_propose(
+        self,
+        *,
+        keeper_id: str,
+        retire_ids: Sequence[str],
+        reason: str,
+        text: str | None = None,
+    ) -> SupersedeProposed:
+        """File a consolidation proposal into klams' review queue.
+
+        Attributed to the caller's bound identity; every id must be live,
+        agent-authored knowledge. There is deliberately no wrapper for
+        `supersede_proposal_resolve`: acceptance is `manage` scope, and
+        klams-mind never resolves its own proposals.
+        """
+        args: dict[str, Any] = {
+            "keeper_id": keeper_id,
+            "retire_ids": list(retire_ids),
+            "reason": reason,
+        }
+        if text is not None:
+            args["text"] = text
+        return SupersedeProposed.model_validate(await self._call("supersede_propose", args))
+
+    async def supersede_proposals_list(
+        self,
+        *,
+        status: Literal["pending", "accepted", "rejected", "stale", "all"] = "pending",
+        limit: int = 50,
+    ) -> list[SupersedeProposal]:
+        """Proposals in one status, oldest first (klams caps `limit` at 200)."""
+        out = await self._call("supersede_proposals_list", {"status": status, "limit": limit})
+        return _ProposalList.model_validate(out).proposals
+
     async def _call(self, tool: str, args: dict[str, Any]) -> Any:
         if self._tool_caller is None:
             raise KlamsError("no MCP session — use `async with connect(cfg) as client`")
         result = await self._tool_caller(tool, args)
         text = next((c.text for c in result.content if isinstance(c, TextContent)), "")
         if result.isError:
-            meta = result.meta or {}
-            raise KlamsError(text or f"{tool} failed", error_code=meta.get("error_code"))
+            message, code = _error_parts(text, result.meta or {})
+            raise KlamsError(message or f"{tool} failed", error_code=code)
         if result.structuredContent is not None:
             return result.structuredContent
         return json.loads(text)
+
+
+def _error_parts(text: str, meta: dict[str, Any]) -> tuple[str, str | None]:
+    """Message and machine code of a failed tool call.
+
+    klams sends its whole error envelope — `{isError, content, _meta:
+    {error_code}}` — as JSON inside the text content, and nothing in the
+    result's own `_meta` (measured against 0.1.58). Read the nested one;
+    keep the outer `_meta` for any server that does it the other way.
+    """
+    code = meta.get("error_code")
+    try:
+        envelope = json.loads(text)
+    except ValueError:
+        return text, code
+    if not isinstance(envelope, dict):
+        return text, code
+    inner = envelope.get("_meta") or {}
+    content = envelope.get("content") or []
+    message = next((c.get("text") for c in content if isinstance(c, dict) and c.get("text")), text)
+    return message, code or (inner.get("error_code") if isinstance(inner, dict) else None)
 
 
 @asynccontextmanager
