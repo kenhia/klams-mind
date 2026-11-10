@@ -28,3 +28,4 @@ Thumbs.db
 
 # korg sprint marker (local only)
 .korg-sprint-proposal
+.sprint-defaults
